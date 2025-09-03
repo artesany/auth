@@ -8,6 +8,11 @@
 
 # Node
 /node_modules
+/backend/node_modules
+/dist
+/.angular
+*.log
+.env
 npm-debug.log
 yarn-error.log
 
