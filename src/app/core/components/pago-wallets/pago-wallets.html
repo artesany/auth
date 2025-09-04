@@ -1,34 +1,41 @@
-<!-- src/app/pago-wallets.html -->
-<div style="max-width: 500px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px;">
-  <h2>Pago y Wallet</h2>
+<div style="max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+  <!-- Token info -->
+  <p *ngIf="token; else noToken">
+    <strong>Token anónimo:</strong> {{ token }}
+  </p>
+  <ng-template #noToken>
+    <p style="color: #666;">Usuario no autenticado</p>
+  </ng-template>
 
-  <!-- Botón para autenticarse de forma anónima -->
-  <button (click)="loginAnonymous()" [disabled]="token">Pagar (Autenticación Anónima)</button>
-  <p *ngIf="token">Token recibido: {{ token }}</p>
+  <!-- Botón para autenticación anónima -->
+  <button (click)="loginAnonymous()" style="margin-bottom: 10px; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+    Iniciar sesión anónima
+  </button>
 
-  <hr />
+  <hr>
 
-  <!-- Botón para conectar wallet -->
-  <button (click)="connectWallet()" [disabled]="!token || account">Conectar Wallet</button>
-  <p *ngIf="account">Cuenta conectada: {{ account }}</p>
-  <p *ngIf="chainId">Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
-  <p>Balance: {{ balance }} {{ chainSymbol }}</p>
+  <!-- Wallet info -->
+  <div *ngIf="account; else connectWalletTemplate">
+    <p><strong>Cuenta:</strong> {{ account }}</p>
+    <p><strong>Red:</strong> {{ chainSymbol }} (ID: {{ chainId }})</p>
+    <p><strong>Saldo:</strong> {{ balance }} {{ chainSymbol }}</p>
 
-  <hr />
-
-  <!-- Formulario de transacción -->
-  <div *ngIf="account">
-    <h3>Enviar Transacción</h3>
-    <label>
-      Dirección destino:
-      <input type="text" [(ngModel)]="to" placeholder="0x...">
-    </label>
-    <br />
-    <label>
-      Monto ({{ chainSymbol }}):
-      <input type="text" [(ngModel)]="amount" placeholder="0.01">
-    </label>
-    <br /><br />
-    <button (click)="sendTransaction()" [disabled]="!to || !amount">Enviar</button>
+    <!-- Enviar transacción -->
+    <div style="margin-top: 20px;">
+      <h3>Enviar Transacción</h3>
+      <input [(ngModel)]="to" placeholder="Dirección a enviar" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"/>
+      <input [(ngModel)]="amount" placeholder="Cantidad" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"/>
+      <button (click)="sendTransaction(to, amount)" style="padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
+        Enviar transacción
+      </button>
+    </div>
   </div>
+
+  <!-- Template cuando no hay wallet conectada -->
+  <ng-template #connectWalletTemplate>
+    <p style="color: #666;">No hay wallet conectada.</p>
+    <button (click)="connectWallet()" style="padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      Conectar Wallet
+    </button>
+  </ng-template>
 </div>

@@ -1,9 +1,8 @@
-// src/app/pago-wallets.ts
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { effect } from '@angular/core';
 import { AuthWalletService } from '../../services/auth-wallet.service';
-import {effect} from '@angular/core'
 
 @Component({
   selector: 'app-pago-wallets',
@@ -17,50 +16,53 @@ export class PagoWallets {
   chainId: number | null = null;
   chainSymbol: string = 'ETH';
   balance: string = '0';
+  amount: string = '0';
   to: string = '';
-  amount: string = '';
 
-  constructor(private authWallet: AuthWalletService)  {
-  // Reaccionar a cambios en señales
-  effect(() => {
-    this.token = this.authWallet.token();
-  });
-  effect(() => {
-    this.account = this.authWallet.account();
-  });
-  effect(() => {
-    this.chainId = this.authWallet.chainId();
-  });
-  effect(() => {
-    this.chainSymbol = this.authWallet.chainSymbol();
-  });
-  effect(() => {
-    this.balance = this.authWallet.balance();
-  });
-}
-  // Autenticación anónima
-  loginAnonymous() {
-    this.authWallet.loginAnonymous('uuid-prueba-123'); // reemplazar con generación dinámica si se desea
+  constructor(private authWallet: AuthWalletService) {
+    effect(() => {
+      this.token = this.authWallet.token();
+    });
+
+    effect(() => {
+      this.account = this.authWallet.account();
+    });
+
+    effect(() => {
+      this.chainId = this.authWallet.chainId();
+    });
+
+    effect(() => {
+      this.chainSymbol = this.authWallet.chainSymbol();
+    });
+
+    effect(() => {
+      this.balance = this.authWallet.balance();
+    });
+
+    effect(() => {
+      this.amount = this.authWallet.amount();
+    });
   }
 
-  // Conectar wallet
+  loginAnonymous() {
+    this.authWallet.loginAnonymous('uuid-prueba-123');
+  }
+
   connectWallet() {
     this.authWallet.connectWallet();
   }
 
-  // Enviar transacción
-  async sendTransaction() {
-    if (!this.to || !this.amount) return;
-
+  async sendTransaction(to: string, amount: string) {
     try {
-      const tx = await this.authWallet.sendTransaction(this.to, this.amount);
-      console.log('Transacción enviada:', tx);
-      alert(`Transacción enviada:\nHash: ${tx.hash}`);
+      await this.authWallet.sendTransaction(to, amount);
+      console.log('Transacción enviada y guardada exitosamente');
+      // Limpiar campos después de enviar
       this.to = '';
-      this.amount = '';
-    } catch (err) {
-      console.error('Error enviando transacción:', err);
-      alert(`Error: ${err instanceof Error ? err.message : err}`);
+      this.amount = '0';
+    } catch (error) {
+      console.error('Error en transacción:', error);
+      alert('Error al enviar transacción: ' + (error as Error).message);
     }
   }
 }
