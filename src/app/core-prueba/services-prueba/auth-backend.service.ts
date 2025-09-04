@@ -1,28 +1,27 @@
-// auth-backend.service.ts
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AuthBackendService {
-  // Signal para guardar el token del usuario
+  // Signal para reactividad en Angular 20
   token = signal<string | null>(null);
+
+  private backendUrl = 'http://localhost:3000'; // Base URL de tu backend
 
   constructor(private http: HttpClient) {}
 
-  // Llamar al backend para crear usuario anónimo
-  async loginAnon(): Promise<string> {
-    const res: any = await this.http.post('/api/anon-auth', {}).toPromise();
-    this.token.set(res.token);
-    return res.token;
-  }
-
-  // Guardar datos en Firestore a través del backend
-  async saveData(data: any) {
-    if (!this.token()) throw new Error('No token disponible');
-    const res = await this.http.post('/api/save-uuid', {
-      token: this.token(),
-      data
-    }).toPromise();
-    return res;
+  async loginAnonymous(uuid: string): Promise<string | null> {
+    try {
+      // Endpoint corregido
+      const response: { token: string } = await firstValueFrom(
+        this.http.post<{ token: string }>(`${this.backendUrl}/auth-anon`, { uuid })
+      );
+      this.token.set(response.token); // Actualiza el signal
+      return response.token;
+    } catch (error) {
+      console.error('Error autenticando usuario anónimo:', error);
+      return null;
+    }
   }
 }

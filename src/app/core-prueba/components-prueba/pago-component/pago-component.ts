@@ -1,29 +1,24 @@
-// pago.component.ts
 import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { AuthBackendService } from '../../../core-prueba/services-prueba/auth-backend.service';
 
 @Component({
-  selector: 'app-pago-component',
+  selector: 'app-pago',
   standalone: true,
+  imports: [CommonModule],
   template: `
-    <button (click)="pagar()">Pagar</button>
+    <button (click)="login()">Pagar</button>
+    <p *ngIf="token">Token: {{ token }}</p>
   `
 })
 export class PagoComponent {
-  constructor(private authService: AuthBackendService) {}
+  token: string | null = null;
 
-  async pagar() {
-    try {
-      // 1️⃣ Autenticación anónima
-      const token = await this.authService.loginAnon();
-      console.log('Token recibido:', token);
+  constructor(private auth: AuthBackendService) {}
 
-      // 2️⃣ Guardar UUID / acción en Firestore
-      const res = await this.authService.saveData({ producto: 'Curso Angular' });
-      console.log('Registro guardado:', res);
-    } catch (err) {
-      console.error('Error al pagar:', err);
-    }
+  async login() {
+    const uuid = 'uuid-prueba-123'; // reemplaza con generación dinámica si quieres
+    this.token = await this.auth.loginAnonymous(uuid);
+    console.log('Token recibido:', this.token);
   }
 }
-
