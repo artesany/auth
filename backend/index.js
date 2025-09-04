@@ -1,15 +1,8 @@
-
-
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import admin from 'firebase-admin';
-
-
-
-
 import { firebaseServiceAccount } from './config/firebaseServiceAccount.js';
-
 
 const app = express();
 app.use(cors());
@@ -20,17 +13,19 @@ admin.initializeApp({
   credential: admin.credential.cert(firebaseServiceAccount),
 });
 
-// Endpoint para autenticación anónima
-app.post('/auth/anonymous', async (req, res) => {
+app.post('/auth-anon', async (req, res) => {
   try {
-    const { uuid } = req.body;
-    const token = await admin.auth().createCustomToken(uuid);
+    // Generar UID aleatorio (o puedes usar el uuid que mandas desde Angular)
+    const uid = req.body.uuid || `anon-${Date.now()}`;
+
+    // Crear custom token
+    const token = await admin.auth().createCustomToken(uid);
+
     res.json({ token });
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error generando token');
+    console.error('Error generando token:', err);
+    res.status(500).send(err);
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(3000, () => console.log('Servidor backend escuchando en http://localhost:3000'));

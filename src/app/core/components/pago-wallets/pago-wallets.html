@@ -1,0 +1,34 @@
+<!-- src/app/pago-wallets.html -->
+<div style="max-width: 500px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px;">
+  <h2>Pago y Wallet</h2>
+
+  <!-- Botón para autenticarse de forma anónima -->
+  <button (click)="loginAnonymous()" [disabled]="token">Pagar (Autenticación Anónima)</button>
+  <p *ngIf="token">Token recibido: {{ token }}</p>
+
+  <hr />
+
+  <!-- Botón para conectar wallet -->
+  <button (click)="connectWallet()" [disabled]="!token || account">Conectar Wallet</button>
+  <p *ngIf="account">Cuenta conectada: {{ account }}</p>
+  <p *ngIf="chainId">Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
+  <p>Balance: {{ balance }} {{ chainSymbol }}</p>
+
+  <hr />
+
+  <!-- Formulario de transacción -->
+  <div *ngIf="account">
+    <h3>Enviar Transacción</h3>
+    <label>
+      Dirección destino:
+      <input type="text" [(ngModel)]="to" placeholder="0x...">
+    </label>
+    <br />
+    <label>
+      Monto ({{ chainSymbol }}):
+      <input type="text" [(ngModel)]="amount" placeholder="0.01">
+    </label>
+    <br /><br />
+    <button (click)="sendTransaction()" [disabled]="!to || !amount">Enviar</button>
+  </div>
+</div>
