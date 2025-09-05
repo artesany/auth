@@ -20,6 +20,18 @@
     <p><strong>Red:</strong> {{ chainSymbol }} (ID: {{ chainId }})</p>
     <p><strong>Saldo:</strong> {{ balance }} {{ chainSymbol }}</p>
 
+    <!-- Selector de Red -->
+    <div style="margin-top: 15px; margin-bottom: 15px;">
+      <h4>Cambiar Red</h4>
+      <button 
+        *ngFor="let chain of availableChains" 
+        (click)="switchChain(chain.id)"
+        style="margin-right: 5px; margin-bottom: 5px; padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;"
+      >
+        {{ chain.name }}
+      </button>
+    </div>
+
     <!-- Enviar transacción -->
     <div style="margin-top: 20px;">
       <h3>Enviar Transacción</h3>

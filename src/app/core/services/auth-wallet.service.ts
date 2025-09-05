@@ -5,6 +5,7 @@ import { ethers, BrowserProvider, isAddress, parseEther, formatEther } from 'eth
 import { firebaseAuth, firestore } from '../../firebase.config';
 import { signInWithCustomToken } from 'firebase/auth';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
+import { getChainById } from '../helpers/chains.helper';
 
 @Injectable({ providedIn: 'root' })
 export class AuthWalletService {
@@ -25,7 +26,6 @@ export class AuthWalletService {
     private http: HttpClient,
     private firestoreService: FirestoreService
   ) {
-    // Actualiza balance automáticamente cuando cambian account o chain
     effect(async () => {
       if (this.account() && this.provider) {
         await this.refreshBalance();
@@ -75,6 +75,11 @@ export class AuthWalletService {
     ethereum.on('chainChanged', async (chainIdHex: string) => {
       const id = Number(BigInt(chainIdHex));
       this.chainId.set(id);
+
+      // Actualiza símbolo de la moneda automáticamente
+      const chainInfo = getChainById(id);
+      this.chainSymbol.set(chainInfo?.symbol || 'ETH');
+
       if (this.provider) this.signer = await this.provider.getSigner();
       await this.refreshBalance();
     });
@@ -97,8 +102,12 @@ export class AuthWalletService {
       if (accounts[0]) this.signer = await this.provider.getSigner();
 
       const network = await this.provider.getNetwork();
-      this.chainId.set(Number(network.chainId));
-      this.chainSymbol.set('ETH');
+      const chainIdNum = Number(network.chainId);
+      this.chainId.set(chainIdNum);
+
+      // Actualiza símbolo al conectar
+      const chainInfo = getChainById(chainIdNum);
+      this.chainSymbol.set(chainInfo?.symbol || 'ETH');
 
       await this.refreshBalance();
       return accounts[0] || null;
@@ -144,5 +153,58 @@ export class AuthWalletService {
     console.log('Transacción guardada en Firestore');
 
     return tx;
+  }
+
+  // 🔹 Cambiar de red (nueva funcionalidad integrada)
+  async switchChain(targetChainId: number): Promise<boolean> {
+    if (!this.provider) return false;
+    const ethereum = (window as any).ethereum;
+    const chainHex = '0x' + targetChainId.toString(16);
+
+    try {
+      await ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chainHex }]
+      });
+
+      this.provider = new ethers.BrowserProvider(ethereum);
+      this.signer = await this.provider.getSigner();
+      this.chainId.set(targetChainId);
+
+      const chain = getChainById(targetChainId);
+      this.chainSymbol.set(chain?.symbol || 'ETH');
+
+      await this.refreshBalance();
+      return true;
+    } catch (switchError: any) {
+      if (switchError.code === 4902) {
+        const chainInfo = getChainById(targetChainId);
+        if (!chainInfo) return false;
+
+        try {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: chainHex,
+              chainName: chainInfo.name,
+              rpcUrls: [chainInfo.rpcUrl],
+              nativeCurrency: chainInfo.nativeCurrency
+            }]
+          });
+          this.provider = new ethers.BrowserProvider(ethereum);
+          this.signer = await this.provider.getSigner();
+          this.chainId.set(targetChainId);
+          this.chainSymbol.set(chainInfo.symbol || 'ETH');
+          await this.refreshBalance();
+          return true;
+        } catch (err) {
+          console.error('Failed to add chain:', err);
+          return false;
+        }
+      } else {
+        console.error('Failed to switch chain:', switchError);
+        return false;
+      }
+    }
   }
 }

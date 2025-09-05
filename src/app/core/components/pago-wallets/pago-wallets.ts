@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { effect } from '@angular/core';
 import { AuthWalletService } from '../../services/auth-wallet.service';
+import { CHAINS } from '../../helpers/chains.helper';
 
 @Component({
   selector: 'app-pago-wallets',
@@ -18,6 +19,7 @@ export class PagoWallets {
   balance: string = '0';
   amount: string = '0';
   to: string = '';
+  availableChains = CHAINS;
 
   constructor(private authWallet: AuthWalletService) {
     effect(() => {
@@ -51,6 +53,13 @@ export class PagoWallets {
 
   connectWallet() {
     this.authWallet.connectWallet();
+  }
+
+  async switchChain(chainId: number) {
+    const success = await this.authWallet.switchChain(chainId);
+    if (!success) {
+      alert(`No se pudo cambiar a la red ${chainId}. Revisa la consola para más detalles.`);
+    }
   }
 
   async sendTransaction(to: string, amount: string) {
