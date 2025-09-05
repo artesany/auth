@@ -1,49 +1,65 @@
-<div style="max-width: 700px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
-  <!-- Selector de Blockchain -->
-  <div style="margin-bottom: 20px; padding: 15px; background: #e9ecef; border-radius: 6px;">
-    <h3 style="margin-top: 0;">🌐 Seleccionar Blockchain</h3>
-    <div style="display: flex; gap: 10px;">
-      <button 
-        (click)="selectBlockchain('ethereum')" 
-        [style.background]="currentBlockchain() === 'ethereum' ? '#007bff' : '#6c757d'"
-        style="padding: 10px 20px; color: white; border: none; border-radius: 4px; cursor: pointer;"
-      >
-        Ethereum
-      </button>
-      <button 
-        (click)="selectBlockchain('solana')" 
-        [style.background]="currentBlockchain() === 'solana' ? '#9945FF' : '#6c757d'"
-        style="padding: 10px 20px; color: white; border: none; border-radius: 4px; cursor: pointer;"
-      >
-        Solana ⚡
+<div>
+  <!-- Modal para selección de wallet Solana -->
+  <div *ngIf="showSolanaSelector">
+    <div>
+      <h3>Seleccionar Wallet Solana</h3>
+      <p>Elige cómo quieres conectarte:</p>
+      
+      <div>
+        <button 
+          *ngFor="let wallet of solanaWallets"
+          (click)="selectSolanaWallet(wallet.name)"
+        >
+          {{ wallet.icon }} {{ wallet.name }}
+        </button>
+      </div>
+
+      <button (click)="cancelWalletSelection()">
+        Cancelar
       </button>
     </div>
-    <p style="margin: 10px 0 0 0; color: #666; font-size: 14px;">
-      Blockchain seleccionada: <strong>{{ currentBlockchain() }}</strong>
+  </div>
+
+  <!-- Selector de Blockchain -->
+  <div>
+    <h3>Seleccionar Blockchain</h3>
+    <div>
+      <button (click)="selectBlockchain('ethereum')">
+        Ethereum
+      </button>
+      <button (click)="selectBlockchain('solana')">
+        Conectar Wallet Solana
+      </button>
+    </div>
+    <p>
+      Modo: <strong>{{ currentBlockchain() === 'ethereum' ? 'Ethereum' : 'Solana' }}</strong>
     </p>
   </div>
 
   <!-- Debug Info -->
-  <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
-    <p><small>🔧 <strong>Estado:</strong> {{ providerStatus }}</small></p>
-    <button (click)="debugService()" style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
-      Debug Service
+  <div>
+    <p>
+      <strong>Estado:</strong> 
+      {{ currentBlockchain() === 'ethereum' ? providerStatus : solanaProviderStatus }}
+    </p>
+    <button (click)="debugService()">
+      Debug
     </button>
   </div>
 
   <!-- Sección de Ethereum -->
   <div *ngIf="currentBlockchain() === 'ethereum'">
     <!-- Estado de Autenticación -->
-    <div style="margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+    <div>
       <p *ngIf="isAuthenticated; else notAuthenticated">
-        🔐 <strong>Autenticado:</strong> {{ firebaseUser?.email || 'Usuario anónimo' }}
-        <button (click)="logout()" style="margin-left: 10px; padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+        Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}
+        <button (click)="logout()">
           Cerrar sesión
         </button>
       </p>
       <ng-template #notAuthenticated>
-        <p style="color: #666;">🔓 No autenticado</p>
-        <button (click)="loginAnonymous()" style="padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        <p>No autenticado</p>
+        <button (click)="loginAnonymous()">
           Iniciar sesión anónima
         </button>
       </ng-template>
@@ -51,42 +67,38 @@
 
     <!-- Wallet info Ethereum -->
     <div *ngIf="account; else connectWalletTemplate">
-      <h3>💰 Ethereum Wallet</h3>
-      <p><strong>Cuenta:</strong> {{ account }}</p>
-      <p><strong>Red:</strong> {{ chainSymbol }} (ID: {{ chainId }})</p>
-      <p><strong>Saldo:</strong> {{ balance }} {{ chainSymbol }}</p>
+      <h3>Ethereum Wallet</h3>
+      <p>Cuenta: {{ account }}</p>
+      <p>Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
+      <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
 
       <!-- Selector de Red -->
-      <div style="margin-top: 15px; margin-bottom: 15px;">
-        <h4>🔁 Cambiar Red</h4>
-        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+      <div>
+        <h4>Cambiar Red</h4>
+        <div>
           <button 
             *ngFor="let chain of availableChains" 
             (click)="switchChain(chain.id)"
-            style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;"
           >
-            {{ chain.symbol }}
+            {{ chain.name }}
           </button>
         </div>
       </div>
 
       <!-- Enviar transacción Ethereum -->
-      <div style="margin-top: 20px;">
-        <h4>📤 Enviar ETH</h4>
+      <div>
+        <h4>Enviar ETH</h4>
         <input 
           [(ngModel)]="to" 
           placeholder="Dirección destino (0x...)" 
-          style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"
         />
         <input 
           [(ngModel)]="amount" 
           placeholder="Cantidad {{ chainSymbol }}" 
-          style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"
         />
         <button 
           (click)="sendTransaction(to, amount)" 
           [disabled]="!isAuthenticated || !to || !amount"
-          style="padding: 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"
         >
           {{ !isAuthenticated ? 'Autentícate primero' : 'Enviar ETH' }}
         </button>
@@ -97,48 +109,52 @@
   <!-- Sección de Solana -->
   <div *ngIf="currentBlockchain() === 'solana'">
     <!-- Wallet info Solana -->
-    <div *ngIf="solanaConnected; else connectWalletTemplate">
-      <h3>⚡ Solana Wallet</h3>
-      <p><strong>Wallet:</strong> {{ solanaWalletName }}</p>
-      <p><strong>Cuenta:</strong> {{ solanaAccount }}</p>
-      <p><strong>Saldo:</strong> {{ solanaBalance }} SOL</p>
+    <div *ngIf="solanaConnected; else connectSolanaTemplate">
+      <h3>Solana Wallet Conectada</h3>
+      <p>Wallet: {{ solanaWalletName }}</p>
+      <p>Cuenta: {{ solanaAccount }}</p>
+      <p>Saldo: {{ solanaBalance }} SOL</p>
 
       <!-- Enviar transacción Solana -->
-      <div style="margin-top: 20px;">
-        <h4>📤 Enviar SOL</h4>
+      <div>
+        <h4>Enviar SOL</h4>
         <input 
           [(ngModel)]="to" 
           placeholder="Dirección destino (Solana address)" 
-          style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"
         />
         <input 
           [(ngModel)]="amount" 
           placeholder="Cantidad SOL" 
-          style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;"
         />
         <button 
           (click)="sendTransaction(to, amount)" 
           [disabled]="!solanaConnected || !to || !amount"
-          style="padding: 10px; background: #9945FF; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"
         >
           Enviar SOL
         </button>
       </div>
     </div>
+
+    <!-- Template específico para conectar Solana -->
+    <ng-template #connectSolanaTemplate>
+      <div>
+        <p>Selecciona "Conectar Wallet Solana" arriba para comenzar</p>
+        <div *ngIf="solanaWallets.length > 0">
+          <p>Wallets detectadas: {{ solanaWallets.length }}</p>
+        </div>
+        <div *ngIf="solanaWallets.length === 0">
+          <p>No se detectaron wallets Solana. Instala Phantom o Solflare.</p>
+        </div>
+      </div>
+    </ng-template>
   </div>
 
-  <!-- Template cuando no hay wallet conectada -->
+  <!-- Template cuando no hay wallet Ethereum conectada -->
   <ng-template #connectWalletTemplate>
-    <div style="text-align: center; padding: 30px;">
-      <p style="color: #666; margin-bottom: 20px;">
-        {{ currentBlockchain() === 'ethereum' ? 'No hay wallet Ethereum conectada.' : 'No hay wallet Solana conectada.' }}
-      </p>
-      <button 
-        (click)="connectWallet()" 
-        [style.background]="currentBlockchain() === 'ethereum' ? '#007bff' : '#9945FF'"
-        style="padding: 15px 30px; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 10px;"
-      >
-        {{ currentBlockchain() === 'ethereum' ? '🦊 Conectar MetaMask' : '⚡ Conectar Wallet Solana' }}
+    <div>
+      <p>No hay wallet Ethereum conectada.</p>
+      <button (click)="connectWallet()">
+        Conectar MetaMask
       </button>
     </div>
   </ng-template>

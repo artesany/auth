@@ -3,6 +3,13 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    
+    "types": ["node"],
+    "paths": {
+      "@/*":["./src"]
+    },
+    
+    
     "strict": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
@@ -13,7 +20,11 @@
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "ES2022",
-    "module": "preserve"
+    "module": "preserve",
+    "typeRoots": ["node_modules/@types",
+    "src/types"
+  ],
+  "composite": true
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
@@ -22,6 +33,10 @@
     "typeCheckHostBindings": true,
     "strictTemplates": true
   },
+  "include":["src/**/*"
+],
+  "exclude":["node_modules", "dist"
+],
   "files": [],
   "references": [
     {

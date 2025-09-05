@@ -2,7 +2,8 @@ import { Component, OnInit, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthWalletService } from '../../services/auth-wallet.service';
-import { SolanaWalletService } from '../../../core-sol/services/solana-wallet.service'; // Nuevo servicio
+import { SolanaWalletService } from '../../../core-sol/services/solana-wallet.service';
+
 import { CHAINS } from '../../helpers/chains.helper';
 
 @Component({
@@ -26,6 +27,7 @@ export class PagoWallets implements OnInit {
   solanaBalance: string = '0';
   solanaConnected: boolean = false;
   solanaWalletName: string = '';
+  solanaProviderStatus: string = '';
   
   // Signals compartidos
   availableChains = CHAINS;
@@ -33,81 +35,49 @@ export class PagoWallets implements OnInit {
   firebaseUser: any = null;
   providerStatus: string = '';
   
-  // Nueva signal para blockchain seleccionado
   currentBlockchain = signal<'ethereum' | 'solana'>('ethereum');
+  solanaWallets: any[] = [];
+  showSolanaSelector: boolean = false;
 
   constructor(
     public authWallet: AuthWalletService,
-    public solanaWallet: SolanaWalletService // Nuevo servicio
+    public solanaWallet: SolanaWalletService,
+    
   ) {
+    // Efectos simplificados - solo para UI
+    effect(() => {
+      this.solanaAccount = this.solanaWallet.account();
+      this.solanaBalance = this.solanaWallet.balance();
+      this.solanaConnected = this.solanaWallet.isConnected();
+      this.solanaWalletName = this.solanaWallet.walletName();
+      this.solanaProviderStatus = this.solanaWallet.providerStatus();
+      this.solanaWallets = this.solanaWallet.availableWallets();
+      this.showSolanaSelector = this.solanaWallet.showWalletSelector();
+    });
+
     // Efectos para Ethereum
     effect(() => {
       this.account = this.authWallet.account();
-      console.log('Ethereum account updated:', this.account);
-    });
-
-    effect(() => {
       this.chainId = this.authWallet.chainId();
-      console.log('ChainId updated:', this.chainId);
-    });
-
-    effect(() => {
       this.chainSymbol = this.authWallet.chainSymbol();
-      console.log('ChainSymbol updated:', this.chainSymbol);
-    });
-
-    effect(() => {
       this.balance = this.authWallet.balance();
-      console.log('Ethereum balance updated:', this.balance);
-    });
-
-    effect(() => {
       this.isAuthenticated = this.authWallet.isAuthenticated();
-      console.log('Auth updated:', this.isAuthenticated);
-    });
-
-    effect(() => {
       this.firebaseUser = this.authWallet.firebaseUser();
-      console.log('FirebaseUser updated:', this.firebaseUser);
-    });
-
-    effect(() => {
       this.providerStatus = this.authWallet.providerStatus();
-      console.log('ProviderStatus updated:', this.providerStatus);
-    });
-
-    // Efectos para Solana
-    effect(() => {
-      this.solanaAccount = this.solanaWallet.account();
-      console.log('Solana account updated:', this.solanaAccount);
-    });
-
-    effect(() => {
-      this.solanaBalance = this.solanaWallet.balance();
-      console.log('Solana balance updated:', this.solanaBalance);
-    });
-
-    effect(() => {
-      this.solanaConnected = this.solanaWallet.isConnected();
-      console.log('Solana connected:', this.solanaConnected);
-    });
-
-    effect(() => {
-      this.solanaWalletName = this.solanaWallet.walletName();
-      console.log('Solana wallet:', this.solanaWalletName);
     });
   }
 
   ngOnInit() {
-    // Inicializar providers
     this.authWallet.initProvider();
     this.solanaWallet.initProvider();
   }
 
-  // Seleccionar blockchain
   selectBlockchain(blockchain: 'ethereum' | 'solana') {
     this.currentBlockchain.set(blockchain);
-    console.log('Blockchain selected:', blockchain);
+    
+    if (blockchain === 'solana') {
+      this.connectSolanaWallet();
+    }
   }
 
   async loginAnonymous() {
@@ -115,7 +85,6 @@ export class PagoWallets implements OnInit {
       const uuid = localStorage.getItem('anonymous_uuid') || this.generateUUID();
       await this.authWallet.loginAnonymous(uuid);
     } catch (error) {
-      console.error('Error en login anónimo:', error);
       alert('Error al iniciar sesión: ' + (error as Error).message);
     }
   }
@@ -128,21 +97,33 @@ export class PagoWallets implements OnInit {
     }
   }
 
-  // Conectar wallet según blockchain seleccionado
   async connectWallet() {
-    console.log('Connecting to:', this.currentBlockchain());
-    
     if (this.currentBlockchain() === 'ethereum') {
-      const account = await this.authWallet.connectWallet();
-      if (account) {
-        console.log('Ethereum wallet connected:', account);
-      }
-    } else {
-      const account = await this.solanaWallet.connectWallet();
-      if (account) {
-        console.log('Solana wallet connected:', account);
-      }
+      await this.authWallet.connectWallet();
     }
+  }
+
+  async connectSolanaWallet() {
+    const availableWallets = this.solanaWallet.availableWallets();
+    
+    if (availableWallets.length === 0) {
+      alert('No se detectaron wallets Solana. Instala Phantom o Solflare.');
+      return;
+    }
+    
+    if (availableWallets.length === 1) {
+      await this.solanaWallet.selectWallet(availableWallets[0].name);
+    } else {
+      this.solanaWallet.showSelector();
+    }
+  }
+
+  async selectSolanaWallet(walletName: string) {
+    await this.solanaWallet.selectWallet(walletName);
+  }
+
+  cancelWalletSelection() {
+    this.solanaWallet.hideSelector();
   }
 
   async switchChain(chainId: number) {
@@ -152,7 +133,6 @@ export class PagoWallets implements OnInit {
         alert(`No se pudo cambiar a la red ${chainId}`);
       }
     }
-    // Solana no necesita cambio de chains
   }
 
   async sendTransaction(to: string, amount: string) {
@@ -163,23 +143,19 @@ export class PagoWallets implements OnInit {
           return;
         }
         await this.authWallet.sendTransaction(to, amount);
-        console.log('Transacción Ethereum enviada');
       } else {
-        // Validación para Solana
         if (!this.solanaConnected) {
           alert('Debes conectar tu wallet Solana primero');
           return;
         }
         await this.solanaWallet.sendTransaction(to, amount);
-        console.log('Transacción Solana enviada');
       }
       
-      // Limpiar campos
       this.to = '';
       this.amount = '0';
+      alert('Transacción enviada exitosamente');
       
     } catch (error) {
-      console.error('Error en transacción:', error);
       alert('Error al enviar transacción: ' + (error as Error).message);
     }
   }
