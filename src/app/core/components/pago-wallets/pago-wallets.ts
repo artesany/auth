@@ -3,8 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthWalletService } from '../../services/auth-wallet.service';
 import { SolanaWalletService } from '../../../core-sol/services/solana-wallet.service';
-
-import { CHAINS } from '../../helpers/chains.helper';
+import { FirestoreService } from '../../../core-prueba/services-prueba/firestore.service';
+import { CHAINS, getChainById } from '../../helpers/chains.helper';
+import { Transaction } from '../../../types/types';
+import { Timestamp } from 'firebase/firestore';
 
 @Component({
   selector: 'app-pago-wallets',
@@ -13,7 +15,6 @@ import { CHAINS } from '../../helpers/chains.helper';
   templateUrl: './pago-wallets.html'
 })
 export class PagoWallets implements OnInit {
-  // Signals para Ethereum
   token: string | null = null;
   account: string | null = null;
   chainId: number | null = null;
@@ -21,30 +22,26 @@ export class PagoWallets implements OnInit {
   balance: string = '0';
   amount: string = '0';
   to: string = '';
-  
-  // Signals para Solana
   solanaAccount: string | null = null;
   solanaBalance: string = '0';
   solanaConnected: boolean = false;
   solanaWalletName: string = '';
   solanaProviderStatus: string = '';
-  
-  // Signals compartidos
   availableChains = CHAINS;
   isAuthenticated: boolean = false;
   firebaseUser: any = null;
   providerStatus: string = '';
-  
   currentBlockchain = signal<'ethereum' | 'solana'>('ethereum');
   solanaWallets: any[] = [];
   showSolanaSelector: boolean = false;
+  ethTransactions = signal<Transaction[]>([]);
+  solanaTransactions = signal<Transaction[]>([]);
 
   constructor(
     public authWallet: AuthWalletService,
     public solanaWallet: SolanaWalletService,
-    
+    private firestoreService: FirestoreService
   ) {
-    // Efectos simplificados - solo para UI
     effect(() => {
       this.solanaAccount = this.solanaWallet.account();
       this.solanaBalance = this.solanaWallet.balance();
@@ -55,7 +52,6 @@ export class PagoWallets implements OnInit {
       this.showSolanaSelector = this.solanaWallet.showWalletSelector();
     });
 
-    // Efectos para Ethereum
     effect(() => {
       this.account = this.authWallet.account();
       this.chainId = this.authWallet.chainId();
@@ -70,14 +66,58 @@ export class PagoWallets implements OnInit {
   ngOnInit() {
     this.authWallet.initProvider();
     this.solanaWallet.initProvider();
+    this.loadTransactions();
+  }
+
+  async loadTransactions() {
+    try {
+      if (!this.isAuthenticated) {
+        const uuid = localStorage.getItem('anonymous_uuid') || this.generateUUID();
+        await this.authWallet.loginAnonymous(uuid);
+      }
+      const ethTxs = await this.firestoreService.getTransactions('ethereum');
+      const solTxs = await this.firestoreService.getTransactions('solana');
+      this.ethTransactions.set(ethTxs.sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : a.timestamp.toDate().getTime();
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : b.timestamp.toDate().getTime();
+        return timeB - timeA;
+      }));
+      this.solanaTransactions.set(solTxs.sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : a.timestamp.toDate().getTime();
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : b.timestamp.toDate().getTime();
+        return timeB - timeA;
+      }));
+    } catch (error) {
+      console.error('Error cargando transacciones:', error);
+      alert('Error al cargar transacciones: ' + (error as Error).message);
+    }
+  }
+
+  getExplorerUrl(tx: Transaction): string {
+    if (tx.currency === 'SOL') {
+      return `https://explorer.solana.com/tx/${tx.txHash}?cluster=devnet`;
+    }
+    const chain = CHAINS.find(c => c.symbol === tx.currency);
+    return chain ? `${chain.explorerUrl}/tx/${tx.txHash}` : '#';
+  }
+
+  formatTimestamp(timestamp: Date | Timestamp): Date {
+    return timestamp instanceof Date ? timestamp : timestamp.toDate();
   }
 
   selectBlockchain(blockchain: 'ethereum' | 'solana') {
     this.currentBlockchain.set(blockchain);
-    
+    if (blockchain === 'solana' && !this.isAuthenticated) {
+      const uuid = localStorage.getItem('anonymous_uuid') || this.generateUUID();
+      this.authWallet.loginAnonymous(uuid).catch(error => {
+        console.error('Error en autenticación anónima para Solana:', error);
+        alert('Error al autenticar para Solana: ' + (error as Error).message);
+      });
+    }
     if (blockchain === 'solana') {
       this.connectSolanaWallet();
     }
+    this.loadTransactions();
   }
 
   async loginAnonymous() {
@@ -105,12 +145,10 @@ export class PagoWallets implements OnInit {
 
   async connectSolanaWallet() {
     const availableWallets = this.solanaWallet.availableWallets();
-    
     if (availableWallets.length === 0) {
       alert('No se detectaron wallets Solana. Instala Phantom o Solflare.');
       return;
     }
-    
     if (availableWallets.length === 1) {
       await this.solanaWallet.selectWallet(availableWallets[0].name);
     } else {
@@ -150,11 +188,10 @@ export class PagoWallets implements OnInit {
         }
         await this.solanaWallet.sendTransaction(to, amount);
       }
-      
       this.to = '';
       this.amount = '0';
       alert('Transacción enviada exitosamente');
-      
+      await this.loadTransactions();
     } catch (error) {
       alert('Error al enviar transacción: ' + (error as Error).message);
     }

@@ -4,8 +4,9 @@ import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 import { TorusWalletAdapter } from '@solana/wallet-adapter-torus';
 import { WalletAdapter } from '../../types/solana-wallets';
-import { AuthWalletService } from '../../core/services/auth-wallet.service'; // Nueva dependencia
-import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service'; // Nueva dependencia
+import { AuthWalletService } from '../../core/services/auth-wallet.service';
+import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
+import { Transaction as TransactionType } from '../../types/types';
 
 // Definir tipos específicos para los eventos del wallet
 type WalletEvent = 'connect' | 'disconnect' | 'accountChanged' | 'error';
@@ -13,7 +14,6 @@ type WalletEventListener = (...args: any[]) => void;
 
 @Injectable({ providedIn: 'root' })
 export class SolanaWalletService implements OnDestroy {
-  // Signals
   public account = signal<string | null>(null);
   public balance = signal<string>('0');
   public isConnected = signal<boolean>(false);
@@ -30,22 +30,20 @@ export class SolanaWalletService implements OnDestroy {
   private listeners: { [event in WalletEvent]?: WalletEventListener } = {};
 
   constructor(
-
-    private authWalletService: AuthWalletService, // Inyectamos AuthWalletService
-    private firestoreService: FirestoreService // Inyectamos FirestoreService
+    private authWalletService: AuthWalletService,
+    private firestoreService: FirestoreService
   ) {
     this.connection = new Connection('https://api.devnet.solana.com', 'confirmed');
     
-    // Effect para monitorear cambios de cuenta
     effect(() => {
       const currentAccount = this.account();
       console.log('🔵 [Solana] Account changed:', currentAccount);
       if (currentAccount) {
         this.startBalanceMonitoring();
-        this.startAccountMonitoring(); // <- ¡NUEVO! Monitorear cambios de cuenta
+        this.startAccountMonitoring();
       } else {
         this.stopBalanceMonitoring();
-        this.stopAccountMonitoring(); // <- ¡NUEVO!
+        this.stopAccountMonitoring();
       }
     });
 
@@ -54,7 +52,7 @@ export class SolanaWalletService implements OnDestroy {
 
   ngOnDestroy() {
     this.stopBalanceMonitoring();
-    this.stopAccountMonitoring(); // <- ¡NUEVO!
+    this.stopAccountMonitoring();
     this.removeAllListeners();
   }
 
@@ -67,7 +65,6 @@ export class SolanaWalletService implements OnDestroy {
     const wallets: any[] = [];
 
     if (typeof window !== 'undefined') {
-      // Phantom
       if ((window as any).solana?.isPhantom) {
         wallets.push({
           name: 'Phantom',
@@ -77,7 +74,6 @@ export class SolanaWalletService implements OnDestroy {
         });
       }
 
-      // Solflare
       if ((window as any).solflare?.isSolflare) {
         wallets.push({
           name: 'Solflare',
@@ -87,7 +83,6 @@ export class SolanaWalletService implements OnDestroy {
         });
       }
 
-      // Torus (siempre disponible)
       wallets.push({
         name: 'Torus',
         adapter: new TorusWalletAdapter() as unknown as WalletAdapter,
@@ -105,38 +100,31 @@ export class SolanaWalletService implements OnDestroy {
     }
   }
 
-  // ¡ESTE ES EL MÉTODO QUE FALTABA!
   private setupWalletListeners() {
     if (!this.walletAdapter) return;
 
-    // Remover listeners anteriores si existen
     this.removeAllListeners();
 
-    // Listener para conexión
     this.listeners['connect'] = (publicKey: PublicKey) => {
       console.log('🟢 [Solana] Wallet connected:', publicKey.toString());
       this.handleWalletConnect(publicKey);
     };
 
-    // Listener para desconexión
     this.listeners['disconnect'] = () => {
       console.log('🔴 [Solana] Wallet disconnected');
       this.handleWalletDisconnect();
     };
 
-    // Listener para cambio de cuenta
     this.listeners['accountChanged'] = (newPublicKey: PublicKey | null) => {
       console.log('🔄 [Solana] Account changed:', newPublicKey?.toString());
       this.handleAccountChanged(newPublicKey);
     };
 
-    // Listener para errores
     this.listeners['error'] = (error: any) => {
       console.error('❌ [Solana] Wallet error:', error);
       this.providerStatus.set('Error: ' + error.message);
     };
 
-    // Registrar listeners en el adapter
     Object.entries(this.listeners).forEach(([event, callback]) => {
       if (callback && this.isWalletEvent(event)) {
         this.walletAdapter?.on(event, callback);
@@ -144,7 +132,6 @@ export class SolanaWalletService implements OnDestroy {
     });
   }
 
-  // Helper para verificar que el evento es válido
   private isWalletEvent(event: string): event is WalletEvent {
     return ['connect', 'disconnect', 'accountChanged', 'error'].includes(event);
   }
@@ -160,22 +147,18 @@ export class SolanaWalletService implements OnDestroy {
     this.listeners = {};
   }
 
-  // Nuevo método para manejar cambio de cuenta
   private handleAccountChanged(newPublicKey: PublicKey | null) {
     if (newPublicKey) {
-      // Si hay una nueva cuenta, actualizar
       this.publicKey = newPublicKey;
       this.account.set(newPublicKey.toString());
       this.refreshBalance();
       this.providerStatus.set('Cuenta cambiada');
       console.log('✅ [Solana] Account updated successfully');
     } else {
-      // Si es null, la wallet se desconectó
       this.handleWalletDisconnect();
     }
   }
 
-  // Monitoreo de cuenta por polling (como fallback)
   private startAccountMonitoring() {
     this.stopAccountMonitoring();
     
@@ -189,7 +172,7 @@ export class SolanaWalletService implements OnDestroy {
           this.handleAccountChanged(this.walletAdapter.publicKey);
         }
       }
-    }, 3000); // Verificar cada 3 segundos
+    }, 3000);
   }
 
   private stopAccountMonitoring() {
@@ -220,10 +203,8 @@ export class SolanaWalletService implements OnDestroy {
   private startBalanceMonitoring() {
     this.stopBalanceMonitoring();
     
-    // Refrescar balance inmediatamente
     this.refreshBalance();
     
-    // Y luego cada 30 segundos
     this.balanceRefreshInterval = setInterval(() => {
       this.refreshBalance();
     }, 30000);
@@ -249,7 +230,6 @@ export class SolanaWalletService implements OnDestroy {
       const balance = await this.connection.getBalance(this.publicKey);
       const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
       
-      // Solo actualizar si el valor cambió
       if (this.balance() !== solBalance) {
         this.balance.set(solBalance);
         console.log('💰 [Solana] Balance updated:', solBalance, 'SOL');
@@ -273,10 +253,8 @@ export class SolanaWalletService implements OnDestroy {
       this.walletAdapter = selectedWallet.adapter;
       this.walletName.set(walletName);
       
-      // Configurar listeners para la wallet seleccionada
-      this.setupWalletListeners(); // <- ¡AHORA SÍ EXISTE!
+      this.setupWalletListeners();
       
-      // Conectar
       await this.connectWallet();
       
       this.showWalletSelector.set(false);
@@ -330,7 +308,7 @@ export class SolanaWalletService implements OnDestroy {
     }
   }
 
- async sendTransaction(to: string, amount: string): Promise<string | null> {
+  async sendTransaction(to: string, amount: string): Promise<string | null> {
     if (!this.walletAdapter) {
       alert('Selecciona una wallet primero');
       this.showSelector();
@@ -397,8 +375,7 @@ export class SolanaWalletService implements OnDestroy {
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       });
 
-      // Guardar transacción en la colección 'solana'
-      const registro = {
+      const registro: Omit<TransactionType, 'id'> = {
         from: this.publicKey.toString(),
         to: to,
         amount: amount,
@@ -458,13 +435,11 @@ export class SolanaWalletService implements OnDestroy {
     console.log('================================');
   }
 
-  // Método para forzar actualización de balance
   async forceBalanceRefresh() {
     console.log('🔄 [Solana] Forcing balance refresh');
     await this.refreshBalance();
   }
 
-  // Método para forzar detección de cuenta
   async forceAccountCheck() {
     console.log('🔄 [Solana] Forcing account check');
     if (this.walletAdapter?.publicKey) {

@@ -1,3 +1,11 @@
+<style>
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background-color: #f2f2f2; }
+  a { color: #007bff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+
 <div>
   <!-- Modal para selección de wallet Solana -->
   <div *ngIf="showSolanaSelector">
@@ -47,24 +55,88 @@
     </button>
   </div>
 
+  <!-- Sección de Autenticación -->
+  <div>
+    <p *ngIf="isAuthenticated; else notAuthenticated">
+      Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}
+      <button (click)="logout()">
+        Cerrar sesión
+      </button>
+    </p>
+    <ng-template #notAuthenticated>
+      <p>No autenticado</p>
+      <button (click)="loginAnonymous()">
+        Pagar anónimamente
+      </button>
+    </ng-template>
+  </div>
+
+  <!-- Tabla de Transacciones Ethereum -->
+  <div *ngIf="currentBlockchain() === 'ethereum'">
+    <h3>Transacciones Ethereum</h3>
+    <table *ngIf="ethTransactions().length > 0; else noEthTransactions">
+      <thead>
+        <tr>
+          <th>Click para ver estado actual de la transaccion</th>
+          <th>De</th>
+          <th>A</th>
+          <th>Monto</th>
+          <th>Moneda</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let tx of ethTransactions()">
+          <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
+          <td>{{ tx.from | slice:0:10 }}...</td>
+          <td>{{ tx.to | slice:0:10 }}...</td>
+          <td>{{ tx.amount }}</td>
+          <td>{{ tx.currency }}</td>
+          <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+          <td>{{ tx.status }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <ng-template #noEthTransactions>
+      <p>No hay transacciones Ethereum.</p>
+    </ng-template>
+  </div>
+
+  <!-- Tabla de Transacciones Solana -->
+  <div *ngIf="currentBlockchain() === 'solana'">
+    <h3>Transacciones Solana</h3>
+    <table *ngIf="solanaTransactions().length > 0; else noSolanaTransactions">
+      <thead>
+        <tr>
+          <th>Tx Hash</th>
+          <th>De</th>
+          <th>A</th>
+          <th>Monto</th>
+          <th>Moneda</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let tx of solanaTransactions()">
+          <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
+          <td>{{ tx.from | slice:0:10 }}...</td>
+          <td>{{ tx.to | slice:0:10 }}...</td>
+          <td>{{ tx.amount }}</td>
+          <td>{{ tx.currency }}</td>
+          <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+          <td>{{ tx.status }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <ng-template #noSolanaTransactions>
+      <p>No hay transacciones Solana.</p>
+    </ng-template>
+  </div>
+
   <!-- Sección de Ethereum -->
   <div *ngIf="currentBlockchain() === 'ethereum'">
-    <!-- Estado de Autenticación -->
-    <div>
-      <p *ngIf="isAuthenticated; else notAuthenticated">
-        Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}
-        <button (click)="logout()">
-          Cerrar sesión
-        </button>
-      </p>
-      <ng-template #notAuthenticated>
-        <p>No autenticado</p>
-        <button (click)="loginAnonymous()">
-          Pagar anomimamente
-        </button>
-      </ng-template>
-    </div>
-
     <!-- Wallet info Ethereum -->
     <div *ngIf="account; else connectWalletTemplate">
       <h3>Ethereum Wallet</h3>
@@ -87,7 +159,7 @@
 
       <!-- Enviar transacción Ethereum -->
       <div>
-        <h4>Enviar ETH</h4>
+        <h4>Enviar</h4>
         <input 
           [(ngModel)]="to" 
           placeholder="Dirección destino (0x...)" 
@@ -100,7 +172,7 @@
           (click)="sendTransaction(to, amount)" 
           [disabled]="!isAuthenticated || !to || !amount"
         >
-          {{ !isAuthenticated ? 'Autentícate primero' : 'Enviar ETH' }}
+          {{ !isAuthenticated ? 'Autentícate primero' : 'Enviar' }}
         </button>
       </div>
     </div>

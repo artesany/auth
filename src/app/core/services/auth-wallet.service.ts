@@ -6,10 +6,10 @@ import { firebaseAuth, firestore } from '../../firebase.config';
 import { signInWithCustomToken, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
 import { getChainById } from '../helpers/chains.helper';
+import { Transaction } from '../../types/types';
 
 @Injectable({ providedIn: 'root' })
 export class AuthWalletService {
-  // Signals
   token = signal<string | null>(null);
   account = signal<string | null>(null);
   chainId = signal<number | null>(null);
@@ -18,13 +18,12 @@ export class AuthWalletService {
   amount = signal<string>('0');
   isAuthenticated = signal<boolean>(false);
   firebaseUser = signal<User | null>(null);
-  providerStatus = signal<string>('No inicializado'); // 🔥 NUEVO: Para debug
+  providerStatus = signal<string>('No inicializado');
 
   private provider: BrowserProvider | null = null;
   private signer: ethers.Signer | null = null;
   private backendUrl = 'http://localhost:3000';
 
-  // Claves para localStorage
   private readonly AUTH_TOKEN_KEY = 'firebase_custom_token';
   private readonly ANON_UUID_KEY = 'anonymous_uuid';
 
@@ -32,7 +31,6 @@ export class AuthWalletService {
     private http: HttpClient,
     private firestoreService: FirestoreService
   ) {
-    // Efecto para persistir el token
     effect(() => {
       const currentToken = this.token();
       if (currentToken) {
@@ -42,7 +40,6 @@ export class AuthWalletService {
       }
     });
 
-    // Efecto para refrescar balance
     effect(async () => {
       if (this.account() && this.provider) {
         await this.refreshBalance();
@@ -51,14 +48,10 @@ export class AuthWalletService {
       }
     });
 
-    // Inicializar auth
     this.initAuthListener();
     this.initializeAppAuth();
   }
 
-  /**
-   * 🔥 NUEVO: Método de debug para ver el estado del servicio
-   */
   debugService() {
     console.log('=== DEBUG AuthWalletService ===');
     console.log('Provider:', this.provider);
@@ -121,7 +114,6 @@ export class AuthWalletService {
     this.firebaseUser.set(null);
   }
 
-  // 🔹 Login anónimo
   async loginAnonymous(uuid: string) {
     try {
       localStorage.setItem(this.ANON_UUID_KEY, uuid);
@@ -142,73 +134,47 @@ export class AuthWalletService {
     }
   }
 
-  // 🔹 Cerrar sesión
   async logout() {
     try {
       await signOut(firebaseAuth);
       this.cleanupAuth();
-      console.log('Sesión cerrada correctamente');
     } catch (error) {
       console.error('Error cerrando sesión:', error);
       throw error;
     }
   }
 
-  // 🔹 Inicializa Metamask - MEJORADO CON DEBUG
-  initProvider() {
-    if (typeof window === 'undefined') {
-      this.providerStatus.set('Window no disponible');
-      return;
-    }
-    
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-      this.providerStatus.set('MetaMask no encontrado');
-      console.error('MetaMask no está instalado');
-      return;
-    }
+  async initProvider() {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      this.provider = new ethers.BrowserProvider((window as any).ethereum);
+      this.providerStatus.set('Proveedor detectado');
 
-    try {
-      this.provider = new ethers.BrowserProvider(ethereum);
-      this.providerStatus.set('Provider inicializado correctamente');
-      this.setupListeners();
-    } catch (error) {
-      this.providerStatus.set('Error inicializando provider');
-      console.error('Error creating provider:', error);
+      const ethereum = (window as any).ethereum;
+      ethereum.on('accountsChanged', async (accounts: string[]) => {
+        this.account.set(accounts[0] || null);
+        if (accounts[0]) this.signer = await this.provider!.getSigner();
+      });
+
+      ethereum.on('chainChanged', async (chainIdHex: string) => {
+        const id = Number(BigInt(chainIdHex));
+        this.chainId.set(id);
+        const chainInfo = getChainById(id);
+        this.chainSymbol.set(chainInfo?.symbol || 'ETH');
+        if (this.provider) this.signer = await this.provider.getSigner();
+        await this.refreshBalance();
+      });
+
+      ethereum.on('disconnect', () => {
+        this.account.set(null);
+        this.signer = null;
+        this.balance.set('0');
+      });
+    } else {
+      this.providerStatus.set('No se detectó MetaMask');
     }
   }
 
-  private setupListeners() {
-    if (!this.provider) return;
-    const ethereum = (window as any).ethereum;
-
-    ethereum.on('accountsChanged', async () => {
-      const accounts: string[] = await this.provider!.send('eth_accounts', []);
-      this.account.set(accounts[0] || null);
-      if (accounts[0]) this.signer = await this.provider!.getSigner();
-    });
-
-    ethereum.on('chainChanged', async (chainIdHex: string) => {
-      const id = Number(BigInt(chainIdHex));
-      this.chainId.set(id);
-
-      const chainInfo = getChainById(id);
-      this.chainSymbol.set(chainInfo?.symbol || 'ETH');
-
-      if (this.provider) this.signer = await this.provider.getSigner();
-      await this.refreshBalance();
-    });
-
-    ethereum.on('disconnect', () => {
-      this.account.set(null);
-      this.signer = null;
-      this.balance.set('0');
-    });
-  }
-
-  // 🔹🔹🔹🔹🔹🔹🔹🔹 MÉTODO CONECTAR WALLET RESTAURADO 🔹🔹🔹🔹🔹🔹🔹🔹
   async connectWallet(): Promise<string | null> {
-    // Si no hay provider, intentar inicializarlo
     if (!this.provider) {
       this.initProvider();
       if (!this.provider) {
@@ -239,19 +205,15 @@ export class AuthWalletService {
       return account;
     } catch (err) {
       console.error('Error conectando wallet:', err);
-      
-      // 🔥 MEJOR MANEJO DE ERRORES
       if ((err as any).code === 4001) {
         alert('Connection rejected by user');
       } else {
         alert('Error connecting to wallet: ' + (err as Error).message);
       }
-      
       return null;
     }
   }
 
-  // 🔹 Balance
   async refreshBalance() {
     if (!this.account() || !this.provider) {
       this.balance.set('0');
@@ -261,7 +223,6 @@ export class AuthWalletService {
     this.balance.set(formatEther(b));
   }
 
-  // 🔹 Enviar transacción
   async sendTransaction(to: string, value: string) {
     if (!this.signer) throw new Error('No signer disponible');
     if (!isAddress(to)) throw new Error('Dirección inválida');
@@ -272,8 +233,8 @@ export class AuthWalletService {
 
     const tx = await this.signer.sendTransaction({ to, value: amount });
 
-    const registro = {
-      from: this.account(),
+    const registro: Omit<Transaction, 'id'> = {
+      from: this.account()!,
       to: to,
       amount: value,
       currency: this.chainSymbol(),
@@ -288,7 +249,6 @@ export class AuthWalletService {
     return tx;
   }
 
-  // 🔹 Cambiar de red
   async switchChain(targetChainId: number): Promise<boolean> {
     if (!this.provider) return false;
     const ethereum = (window as any).ethereum;
