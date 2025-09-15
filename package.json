@@ -33,6 +33,7 @@
     "@solana/web3.js": "^1.98.4",
     "@web3modal/ethereum": "^2.7.1",
     "ethers": "^6.15.0",
+    "firebase": "^10.12.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"
