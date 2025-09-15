@@ -4,6 +4,8 @@
   th { background-color: #f2f2f2; }
   a { color: #007bff; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  .auth-section { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+  .admin-badge { background: #ffc107; color: #000; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
 </style>
 
 <div>
@@ -55,29 +57,45 @@
     </button>
   </div>
 
-  <!-- ✅ NUEVA SECCIÓN: Botón de Login con Google -->
-  <div>
+  <!-- Sección de Autenticación Mejorada -->
+  <div class="auth-section">
     <h3>Autenticación</h3>
+    
     <div *ngIf="isAuthenticated; else notAuthenticated">
-      <p>Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}</p>
-      <p *ngIf="isAdmin">👑 <strong>Usuario Administrador</strong></p>
-      <button (click)="logout()">
-        Cerrar sesión
+      <p>
+        <strong>Autenticado como:</strong> 
+        {{ firebaseUser?.email || 'Usuario anónimo' }}
+        <span *ngIf="authWallet.isAdmin()" class="admin-badge">👑 Admin</span>
+      </p>
+      <p><small>UID: {{ firebaseUser?.uid }}</small></p>
+      
+      <button (click)="logout()" style="background: #dc3545; color: white;">
+        🚪 Cerrar sesión
       </button>
+      
+      <div *ngIf="authWallet.isAdmin()">
+        <p><strong>Funciones de administrador:</strong></p>
+        <button (click)="authWallet.debugService()" style="background: #6c757d; color: white; margin-top: 5px;">
+          🔧 Debug Admin
+        </button>
+      </div>
     </div>
     
     <ng-template #notAuthenticated>
-      <p>No autenticado</p>
+      <p>No autenticado - Elige cómo quieres continuar:</p>
       <div>
-        <!-- ✅ BOTÓN DE GOOGLE AÑADIDO -->
-        <button (click)="authWallet.signInWithGoogle()" style="background: #4285F4; color: white; margin-right: 10px;">
+        <button (click)="authWallet.signInWithGoogle()" 
+                style="background: #4285F4; color: white; margin-right: 10px;">
           🚀 Iniciar con Google
         </button>
         
-        <button (click)="loginAnonymous()">
+        <button (click)="loginAnonymous()" 
+                style="background: #6c757d; color: white;">
           🔒 Pagar anónimamente
         </button>
       </div>
+      
+      <p><small>* Google te permite guardar tu historial de transacciones</small></p>
     </ng-template>
   </div>
 
@@ -161,6 +179,7 @@
           <button 
             *ngFor="let chain of availableChains" 
             (click)="switchChain(chain.id)"
+            style="margin: 2px; padding: 5px 10px;"
           >
             {{ chain.name }}
           </button>
@@ -173,16 +192,21 @@
         <input 
           [(ngModel)]="to" 
           placeholder="Dirección destino (0x...)" 
+          style="margin: 5px; padding: 8px; width: 300px;"
         />
+        <br>
         <input 
           [(ngModel)]="amount" 
           placeholder="Cantidad {{ chainSymbol }}" 
+          style="margin: 5px; padding: 8px; width: 150px;"
         />
+        <br>
         <button 
           (click)="sendTransaction(to, amount)" 
           [disabled]="!isAuthenticated || !to || !amount"
+          style="background: #28a745; color: white; padding: 10px 15px; margin-top: 10px;"
         >
-          {{ !isAuthenticated ? 'Autentícate primero' : 'Enviar' }}
+          {{ !isAuthenticated ? '🔒 Autentícate primero' : '🚀 Enviar' }}
         </button>
       </div>
     </div>
@@ -203,16 +227,21 @@
         <input 
           [(ngModel)]="to" 
           placeholder="Dirección destino (Solana address)" 
+          style="margin: 5px; padding: 8px; width: 300px;"
         />
+        <br>
         <input 
           [(ngModel)]="amount" 
           placeholder="Cantidad SOL" 
+          style="margin: 5px; padding: 8px; width: 150px;"
         />
+        <br>
         <button 
           (click)="sendTransaction(to, amount)" 
           [disabled]="!solanaConnected || !to || !amount"
+          style="background: #9945FF; color: white; padding: 10px 15px; margin-top: 10px;"
         >
-          Enviar SOL
+          🚀 Enviar SOL
         </button>
       </div>
     </div>
@@ -235,8 +264,8 @@
   <ng-template #connectWalletTemplate>
     <div>
       <p>No hay wallet Ethereum conectada.</p>
-      <button (click)="connectWallet()">
-        Conectar MetaMask
+      <button (click)="connectWallet()" style="background: #f0ad4e; color: white; padding: 10px 15px;">
+        🔗 Conectar MetaMask
       </button>
     </div>
   </ng-template>

@@ -139,7 +139,7 @@ export class PagoWallets implements OnInit {
   async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
     try {
       const db = getFirestore();
-      const walletDoc = await getDoc(doc(db, 'wallet', blockchain));
+      const walletDoc = await getDoc(doc(db, 'wallets', blockchain));
       if (walletDoc.exists()) {
         const data = walletDoc.data();
         this.adminTo.set(data['address']);
@@ -158,7 +158,7 @@ export class PagoWallets implements OnInit {
     if (this.isAdmin()) {
       try {
         const db = getFirestore();
-        await setDoc(doc(db, 'wallet', this.currentBlockchain()), 
+        await setDoc(doc(db, 'wallets', this.currentBlockchain()), 
           { enabled: false }, 
           { merge: true }
         );

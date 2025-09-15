@@ -339,6 +339,12 @@ private initAuthListener() {
   // NUEVOS MÉTODOS DE AUTENTICACIÓN SOCIAL
   async signInWithGoogle() {
   try {
+    // ✅ Cerrar sesión existente primero si está autenticado
+    if (this.isAuthenticated()) {
+      console.log('🔒 Cerrando sesión previa...');
+      await this.logout();
+    }
+
     this.errorMessage.set(null);
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(this.auth, provider);
@@ -347,12 +353,11 @@ private initAuthListener() {
     const idTokenResult = await user.getIdTokenResult();
     const claims = idTokenResult.claims;
     
-    // ✅ CORRECCIÓN: Acceso por corchetes aquí también
-    this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
+    this.isAdmin.set(claims['admin'] === true);
+    console.log('✅ Usuario autenticado con Google:', user);
     
-    console.log('Usuario autenticado con Google:', user);
   } catch (error: any) {
-    console.error('Error en login con Google:', error);
+    console.error('❌ Error en login con Google:', error);
     this.errorMessage.set(error.message);
   }
 }
