@@ -4,6 +4,8 @@ import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 import { TorusWalletAdapter } from '@solana/wallet-adapter-torus';
 import { WalletAdapter } from '../../types/solana-wallets';
+import { AuthWalletService } from '../../core/services/auth-wallet.service'; // Nueva dependencia
+import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service'; // Nueva dependencia
 
 // Definir tipos específicos para los eventos del wallet
 type WalletEvent = 'connect' | 'disconnect' | 'accountChanged' | 'error';
@@ -27,7 +29,11 @@ export class SolanaWalletService implements OnDestroy {
   private accountCheckInterval: any = null;
   private listeners: { [event in WalletEvent]?: WalletEventListener } = {};
 
-  constructor() {
+  constructor(
+
+    private authWalletService: AuthWalletService, // Inyectamos AuthWalletService
+    private firestoreService: FirestoreService // Inyectamos FirestoreService
+  ) {
     this.connection = new Connection('https://api.devnet.solana.com', 'confirmed');
     
     // Effect para monitorear cambios de cuenta
@@ -324,7 +330,7 @@ export class SolanaWalletService implements OnDestroy {
     }
   }
 
-  async sendTransaction(to: string, amount: string): Promise<string | null> {
+ async sendTransaction(to: string, amount: string): Promise<string | null> {
     if (!this.walletAdapter) {
       alert('Selecciona una wallet primero');
       this.showSelector();
@@ -338,6 +344,11 @@ export class SolanaWalletService implements OnDestroy {
 
     if (!to || !amount) {
       alert('Dirección y monto son requeridos');
+      return null;
+    }
+
+    if (!this.authWalletService.isAuthenticated()) {
+      alert('Debes autenticarte primero');
       return null;
     }
 
@@ -386,10 +397,23 @@ export class SolanaWalletService implements OnDestroy {
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       });
 
+      // Guardar transacción en la colección 'solana'
+      const registro = {
+        from: this.publicKey.toString(),
+        to: to,
+        amount: amount,
+        currency: 'SOL',
+        txHash: signature,
+        timestamp: new Date(),
+        status: 'confirmed'
+      };
+
+      await this.firestoreService.addSolanaRegistro(registro);
+      console.log('Transacción guardada en Firestore (colección solana):', signature);
+
       this.providerStatus.set('Transacción confirmada');
       console.log('Transaction successful:', signature);
       
-      // Refrescar balance después de la transacción
       setTimeout(() => {
         this.refreshBalance();
       }, 2000);

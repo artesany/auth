@@ -8,7 +8,7 @@ export class FirestoreService {
 
   async addRegistro(data: any) {
     try {
-      const colRef = collection(firestore, 'registros');
+      const colRef = collection(firestore, 'ethereum');
       const docRef = await addDoc(colRef, data);
       console.log('Documento creado con ID:', docRef.id);
       return docRef.id;
@@ -17,4 +17,16 @@ export class FirestoreService {
       throw error;
     }
   }
+  async addSolanaRegistro(data: any) {
+    try {
+      const colRef = collection(firestore, 'solana');
+      const docRef = await addDoc(colRef, data);
+      console.log('Documento Solana creado con ID:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error('Error creando documento Solana:', error);
+      throw error;
+    }
+  }
+  
 }
