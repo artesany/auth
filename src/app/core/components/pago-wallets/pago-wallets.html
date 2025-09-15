@@ -55,19 +55,29 @@
     </button>
   </div>
 
-  <!-- Sección de Autenticación -->
+  <!-- ✅ NUEVA SECCIÓN: Botón de Login con Google -->
   <div>
-    <p *ngIf="isAuthenticated; else notAuthenticated">
-      Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}
+    <h3>Autenticación</h3>
+    <div *ngIf="isAuthenticated; else notAuthenticated">
+      <p>Autenticado: {{ firebaseUser?.email || 'Usuario anónimo' }}</p>
+      <p *ngIf="isAdmin">👑 <strong>Usuario Administrador</strong></p>
       <button (click)="logout()">
         Cerrar sesión
       </button>
-    </p>
+    </div>
+    
     <ng-template #notAuthenticated>
       <p>No autenticado</p>
-      <button (click)="loginAnonymous()">
-        Pagar anónimamente
-      </button>
+      <div>
+        <!-- ✅ BOTÓN DE GOOGLE AÑADIDO -->
+        <button (click)="authWallet.signInWithGoogle()" style="background: #4285F4; color: white; margin-right: 10px;">
+          🚀 Iniciar con Google
+        </button>
+        
+        <button (click)="loginAnonymous()">
+          🔒 Pagar anónimamente
+        </button>
+      </div>
     </ng-template>
   </div>
 
