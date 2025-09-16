@@ -41,6 +41,8 @@ export class PagoWallets implements OnInit, OnDestroy {
   isHardcoded = signal<boolean>(false);
   private walletListener: Unsubscribe | null = null;
 
+  private adminWalletCache = new Map<string, { address: string | null, enabled: boolean }>();
+
   constructor(
     public authWallet: AuthWalletService,
     public solanaWallet: SolanaWalletService,
@@ -65,6 +67,10 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.firebaseUser = this.authWallet.firebaseUser();
       this.providerStatus = this.authWallet.providerStatus();
       this.isAdmin.set(this.authWallet.isAdmin());
+      
+      // ✅ Cuando cambia la autenticación, recargar la dirección administrativa
+      // pero sin afectar el listener existente
+      this.loadWalletAddress(this.currentBlockchain());
     });
   }
 
@@ -76,6 +82,10 @@ export class PagoWallets implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.disconnectWalletListener();
+  }
+
+  private disconnectWalletListener() {
     if (this.walletListener) {
       this.walletListener();
       this.walletListener = null;
@@ -134,32 +144,51 @@ export class PagoWallets implements OnInit, OnDestroy {
     this.loadTransactions();
   }
 
-  async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
+async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
     try {
-      const db = getFirestore();
-      if (this.walletListener) {
-        this.walletListener();
+      // ✅ Usar cache para evitar recargas innecesarias
+      const cacheKey = `${blockchain}_wallet`;
+      const cached = this.adminWalletCache.get(cacheKey);
+      
+      if (cached) {
+        this.adminTo.set(cached.address);
+        this.isHardcoded.set(cached.enabled);
+        return;
       }
+
+      const db = getFirestore();
+      
+      // ✅ Desconectar listener anterior si existe
+      this.disconnectWalletListener();
+
       this.walletListener = onSnapshot(doc(db, 'wallets', blockchain), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          this.adminTo.set(data['address'] || null);
-          this.isHardcoded.set(data['enabled'] || false);
+          const address = data['address'] || null;
+          const enabled = data['enabled'] || false;
+          
+          this.adminTo.set(address);
+          this.isHardcoded.set(enabled);
+          
+          // ✅ Guardar en cache
+          this.adminWalletCache.set(cacheKey, { address, enabled });
+          
+          console.log(`Dirección administrativa ${blockchain} cargada:`, address, enabled);
         } else {
           this.adminTo.set(null);
           this.isHardcoded.set(false);
+          this.adminWalletCache.set(cacheKey, { address: null, enabled: false });
         }
       }, (error) => {
         console.error('Error listening to wallet:', error);
         this.adminTo.set(null);
         this.isHardcoded.set(false);
-        alert('Error al cargar dirección administrativa');
+        // No alertar aquí para no molestar durante cambios de autenticación
       });
     } catch (error) {
       console.error('Error loading wallet:', error);
       this.adminTo.set(null);
       this.isHardcoded.set(false);
-      alert('Error al cargar dirección administrativa');
     }
   }
 
@@ -168,9 +197,19 @@ export class PagoWallets implements OnInit, OnDestroy {
       try {
         const db = getFirestore();
         await setDoc(doc(db, 'wallets', this.currentBlockchain()), 
-          { enabled: false }, 
+          { 
+            address: null, 
+            enabled: false,
+            updatedBy: this.firebaseUser?.uid,
+            updatedAt: new Date()
+          }, 
           { merge: true }
         );
+        
+        // ✅ Actualizar cache local
+        const cacheKey = `${this.currentBlockchain()}_wallet`;
+        this.adminWalletCache.set(cacheKey, { address: null, enabled: false });
+        
         this.isHardcoded.set(false);
         this.adminTo.set(null);
         alert('Dirección administrativa reseteada');
@@ -192,7 +231,17 @@ export class PagoWallets implements OnInit, OnDestroy {
 
   async logout() {
     try {
+      // ✅ Guardar estado de la dirección administrativa antes de cerrar sesión
+      const currentAdminTo = this.adminTo();
+      const currentIsHardcoded = this.isHardcoded();
+      
       await this.authWallet.logout();
+      
+      // ✅ Restaurar estado de la dirección administrativa después del logout
+      // Esto evita que se pierda la visualización durante el cambio de sesión
+      this.adminTo.set(currentAdminTo);
+      this.isHardcoded.set(currentIsHardcoded);
+      
     } catch (error) {
       console.error('Error cerrando sesión:', error);
     }

@@ -1,4 +1,4 @@
-import { Injectable, signal, effect, inject } from '@angular/core';
+import { Injectable, signal, effect, inject, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ethers, BrowserProvider, isAddress, parseEther, formatEther } from 'ethers';
@@ -22,7 +22,7 @@ import { getChainById } from '../helpers/chains.helper';
 import { Transaction } from '../../types/types';
 
 @Injectable({ providedIn: 'root' })
-export class AuthWalletService {
+export class AuthWalletService implements OnDestroy {
   // ✅ Inicialización CORRECTA
   private firebaseApp = initializeApp(environment.firebase);
   private auth = getAuth(this.firebaseApp);
@@ -49,6 +49,7 @@ export class AuthWalletService {
 
   private readonly AUTH_TOKEN_KEY = 'firebase_custom_token';
   private readonly ANON_UUID_KEY = 'anonymous_uuid';
+  private authStateUnsubscribe: (() => void) | null = null;
 
   constructor(
     private http: HttpClient,
@@ -77,6 +78,12 @@ export class AuthWalletService {
     this.initializeAppAuth();
   }
 
+  ngOnDestroy() {
+    if (this.authStateUnsubscribe) {
+      this.authStateUnsubscribe();
+    }
+  }
+
   // MÉTODOS EXISTENTES DE WALLET
   debugService() {
     console.log('=== DEBUG AuthWalletService ===');
@@ -92,30 +99,30 @@ export class AuthWalletService {
     console.log('================================');
   }
 
-private initAuthListener() {
-  onAuthStateChanged(this.auth, async (user) => {
-    console.log('Auth state changed:', user);
-    this.firebaseUser.set(user);
-    this.isAuthenticated.set(!!user);
+  private initAuthListener() {
+    this.authStateUnsubscribe = onAuthStateChanged(this.auth, async (user) => {
+      console.log('Auth state changed:', user);
+      this.firebaseUser.set(user);
+      this.isAuthenticated.set(!!user);
 
-    if (user) {
-      const idTokenResult = await user.getIdTokenResult();
-      const claims = idTokenResult.claims;
-      
-      // ✅ CORRECCIÓN: Acceso por corchetes para la propiedad 'admin'
-      this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
-      
-      user.getIdToken().then(token => {
-        console.log('Firebase ID Token disponible');
-      }).catch(err => {
-        console.error('Error getting ID token:', err);
-      });
-    } else {
-      this.token.set(null);
-      this.isAdmin.set(false);
-    }
-  });
-}
+      if (user) {
+        const idTokenResult = await user.getIdTokenResult();
+        const claims = idTokenResult.claims;
+        
+        // ✅ CORRECCIÓN: Acceso por corchetes para la propiedad 'admin'
+        this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
+        
+        user.getIdToken().then(token => {
+          console.log('Firebase ID Token disponible');
+        }).catch(err => {
+          console.error('Error getting ID token:', err);
+        });
+      } else {
+        this.token.set(null);
+        this.isAdmin.set(false);
+      }
+    });
+  }
 
   private async initializeAppAuth() {
     const savedToken = localStorage.getItem(this.AUTH_TOKEN_KEY);
@@ -148,6 +155,10 @@ private initAuthListener() {
     this.isAuthenticated.set(false);
     this.firebaseUser.set(null);
     this.isAdmin.set(false);
+    
+    // ✅ NO limpiar el estado de la wallet conectada
+    // La wallet MetaMask/Solana puede permanecer conectada independientemente de la autenticación Firebase
+    console.log('Sesión Firebase cerrada, pero wallet puede permanecer conectada');
   }
 
   async loginAnonymous(uuid: string) {
@@ -172,8 +183,15 @@ private initAuthListener() {
 
   async logout() {
     try {
+      // ✅ Guardar estado de la wallet antes de cerrar sesión
+      const wasWalletConnected = !!this.account();
+      
       await signOut(this.auth);
       this.cleanupAuth();
+      
+      console.log('Sesión cerrada. Wallet estaba conectada:', wasWalletConnected);
+      // La wallet MetaMask permanece conectada, solo cerramos sesión Firebase
+      
     } catch (error) {
       console.error('Error cerrando sesión:', error);
       throw error;
