@@ -7,6 +7,7 @@ import { FirestoreService } from '../../../core-prueba/services-prueba/firestore
 import { CHAINS, getChainById } from '../../helpers/chains.helper';
 import { Transaction } from '../../../types/types';
 import { Timestamp, getFirestore, doc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { Token } from '../../models/token.model';
 
 @Component({
   selector: 'app-pago-wallets',
@@ -20,7 +21,7 @@ export class PagoWallets implements OnInit, OnDestroy {
   chainId: number | null = null;
   chainSymbol: string = 'ETH';
   balance: string = '0';
-  amount: string = '0'; // ✅ Mantenido como string
+  amount: string = '0';
   to: string = '';
   solanaAccount: string | null = null;
   solanaBalance: string = '0';
@@ -39,8 +40,13 @@ export class PagoWallets implements OnInit, OnDestroy {
   isAdmin = signal<boolean>(false);
   adminTo = signal<string | null>(null);
   isHardcoded = signal<boolean>(false);
-  private walletListener: Unsubscribe | null = null;
+  
+  // ✅ NUEVAS PROPIEDADES PARA TOKENS
+  currentToken = signal<Token | null>(null);
+  availableTokens = signal<Token[]>([]);
+  tokenBalances = signal<Map<string, string>>(new Map());
 
+  private walletListener: Unsubscribe | null = null;
   private adminWalletCache = new Map<string, { address: string | null, enabled: boolean }>();
 
   constructor(
@@ -56,6 +62,11 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.solanaProviderStatus = this.solanaWallet.providerStatus();
       this.solanaWallets = this.solanaWallet.availableWallets();
       this.showSolanaSelector = this.solanaWallet.showWalletSelector();
+      
+      // ✅ NUEVO: Sincronizar tokens de Solana
+      this.availableTokens.set(this.solanaWallet.availableTokens());
+      this.currentToken.set(this.solanaWallet.currentToken());
+      this.tokenBalances.set(this.solanaWallet.tokenBalances());
     });
 
     effect(() => {
@@ -68,8 +79,11 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.providerStatus = this.authWallet.providerStatus();
       this.isAdmin.set(this.authWallet.isAdmin());
       
-      // ✅ Cuando cambia la autenticación, recargar la dirección administrativa
-      // pero sin afectar el listener existente
+      // ✅ NUEVO: Sincronizar tokens de Ethereum
+      this.availableTokens.set(this.authWallet.availableTokens());
+      this.currentToken.set(this.authWallet.currentToken());
+      this.tokenBalances.set(this.authWallet.tokenBalances());
+      
       this.loadWalletAddress(this.currentBlockchain());
     });
   }
@@ -144,9 +158,8 @@ export class PagoWallets implements OnInit, OnDestroy {
     this.loadTransactions();
   }
 
-async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
+  async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
     try {
-      // ✅ Usar cache para evitar recargas innecesarias
       const cacheKey = `${blockchain}_wallet`;
       const cached = this.adminWalletCache.get(cacheKey);
       
@@ -158,7 +171,6 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
 
       const db = getFirestore();
       
-      // ✅ Desconectar listener anterior si existe
       this.disconnectWalletListener();
 
       this.walletListener = onSnapshot(doc(db, 'wallets', blockchain), (docSnap) => {
@@ -170,7 +182,6 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
           this.adminTo.set(address);
           this.isHardcoded.set(enabled);
           
-          // ✅ Guardar en cache
           this.adminWalletCache.set(cacheKey, { address, enabled });
           
           console.log(`Dirección administrativa ${blockchain} cargada:`, address, enabled);
@@ -183,7 +194,6 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
         console.error('Error listening to wallet:', error);
         this.adminTo.set(null);
         this.isHardcoded.set(false);
-        // No alertar aquí para no molestar durante cambios de autenticación
       });
     } catch (error) {
       console.error('Error loading wallet:', error);
@@ -206,7 +216,6 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
           { merge: true }
         );
         
-        // ✅ Actualizar cache local
         const cacheKey = `${this.currentBlockchain()}_wallet`;
         this.adminWalletCache.set(cacheKey, { address: null, enabled: false });
         
@@ -231,14 +240,11 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
 
   async logout() {
     try {
-      // ✅ Guardar estado de la dirección administrativa antes de cerrar sesión
       const currentAdminTo = this.adminTo();
       const currentIsHardcoded = this.isHardcoded();
       
       await this.authWallet.logout();
       
-      // ✅ Restaurar estado de la dirección administrativa después del logout
-      // Esto evita que se pierda la visualización durante el cambio de sesión
       this.adminTo.set(currentAdminTo);
       this.isHardcoded.set(currentIsHardcoded);
       
@@ -283,30 +289,53 @@ async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
     }
   }
 
+  // ✅ NUEVO MÉTODO: Cambiar token seleccionado
+  onTokenChange(token: Token) {
+    this.currentToken.set(token);
+    
+    // Sincronizar con el servicio correspondiente
+    if (this.currentBlockchain() === 'ethereum') {
+      this.authWallet.currentToken.set(token);
+    } else {
+      this.solanaWallet.currentToken.set(token);
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Obtener balance del token actual
+  getCurrentTokenBalance(): string {
+    const currentToken = this.currentToken();
+    if (!currentToken) return '0';
+    
+    return this.tokenBalances().get(currentToken.address) || '0';
+  }
+
   async sendTransaction(to: string, amount: string) {
     try {
-      // ✅ Asegurar que amount sea string y tenga formato válido
       const amountString = typeof amount === 'string' ? amount : String(amount);
       
-      // ✅ Validar formato del amount antes de enviar
       if (!/^\d+(\.\d+)?$/.test(amountString)) {
         throw new Error('Formato de monto inválido. Use números con punto decimal (ej: 0.0008)');
       }
       
       const destination = this.isHardcoded() && this.adminTo() ? this.adminTo()! : to;
+      const currentToken = this.currentToken();
+      
+      if (!currentToken) {
+        throw new Error('No hay token seleccionado');
+      }
       
       if (this.currentBlockchain() === 'ethereum') {
         if (!this.isAuthenticated) {
           alert('Debes estar autenticado para enviar transacciones Ethereum');
           return;
         }
-        await this.authWallet.sendTransaction(destination, amountString);
+        await this.authWallet.transferToken(destination, amountString, currentToken);
       } else {
         if (!this.solanaConnected) {
           alert('Debes conectar tu wallet Solana primero');
           return;
         }
-        await this.solanaWallet.sendTransaction(destination, amountString);
+        await this.solanaWallet.sendTokenTransaction(destination, amountString, currentToken);
       }
       this.to = '';
       this.amount = '0';

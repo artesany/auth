@@ -1,4 +1,4 @@
-import { Injectable, signal, effect, OnDestroy } from '@angular/core';
+import { Injectable, signal, effect, OnDestroy,inject } from '@angular/core';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
@@ -7,6 +7,9 @@ import { WalletAdapter } from '../../types/solana-wallets';
 import { AuthWalletService } from '../../core/services/auth-wallet.service';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
 import { Transaction as TransactionType } from '../../types/types';
+import { TokenService } from '../../core/tokens/services/token-service';
+import { TokenRegistryService } from '../../core/tokens/services/token-registry';
+import { Token } from '../../core/models/token.model';
 
 // Definir tipos específicos para los eventos del wallet
 type WalletEvent = 'connect' | 'disconnect' | 'accountChanged' | 'error';
@@ -22,12 +25,21 @@ export class SolanaWalletService implements OnDestroy {
   public availableWallets = signal<any[]>([]);
   public showWalletSelector = signal<boolean>(false);
 
+  // ✅ NUEVAS SIGNALS PARA TOKENS
+  public currentToken = signal<Token | null>(null);
+  public availableTokens = signal<Token[]>([]);
+  public tokenBalances = signal<Map<string, string>>(new Map());
+
   private connection: Connection;
   private walletAdapter: WalletAdapter | null = null;
-  private publicKey: PublicKey | null = null;
+  private privateKey: PublicKey | null = null;
   private balanceRefreshInterval: any = null;
   private accountCheckInterval: any = null;
   private listeners: { [event in WalletEvent]?: WalletEventListener } = {};
+
+  // ✅ NUEVAS DEPENDENCIAS
+  private tokenService = inject(TokenService);
+  private tokenRegistry = inject(TokenRegistryService);
 
   constructor(
     private authWalletService: AuthWalletService,
@@ -41,9 +53,12 @@ export class SolanaWalletService implements OnDestroy {
       if (currentAccount) {
         this.startBalanceMonitoring();
         this.startAccountMonitoring();
+        this.loadAvailableTokens(); // ✅ Cargar tokens cuando hay cuenta
+        this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
       } else {
         this.stopBalanceMonitoring();
         this.stopAccountMonitoring();
+        this.tokenBalances.set(new Map()); // ✅ Limpiar balances
       }
     });
 
@@ -56,6 +71,181 @@ export class SolanaWalletService implements OnDestroy {
     this.removeAllListeners();
   }
 
+  // ✅ NUEVO MÉTODO: Cargar tokens disponibles
+  private loadAvailableTokens() {
+    const tokens = this.tokenRegistry.getTokens('devnet');
+    this.availableTokens.set(tokens);
+    
+    // Seleccionar token nativo por defecto
+    const nativeToken = tokens.find(t => t.isNative);
+    if (nativeToken) {
+      this.currentToken.set(nativeToken);
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Actualizar balances de tokens
+  async refreshTokenBalances() {
+    if (!this.account() || !this.connection) return;
+
+    try {
+      const balances = await this.tokenService.getTokenBalancesSolana(
+        this.connection,
+        this.account()!,
+        'devnet'
+      );
+
+      // Actualizar mapa de balances
+      const newBalances = new Map<string, string>();
+      balances.forEach(tokenBalance => {
+        newBalances.set(tokenBalance.token.address, tokenBalance.formattedBalance);
+      });
+      
+      this.tokenBalances.set(newBalances);
+    } catch (error) {
+      console.error('Error refreshing token balances:', error);
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Obtener balance de un token específico
+  getTokenBalance(tokenAddress: string): string {
+    return this.tokenBalances().get(tokenAddress) || '0';
+  }
+
+  // ✅ NUEVO MÉTODO: Transferir tokens SPL
+  async sendTokenTransaction(to: string, amount: string, token?: Token): Promise<string> {
+    if (!this.walletAdapter) {
+      alert('Selecciona una wallet primero');
+      this.showSelector();
+      throw new Error('Wallet no conectada');
+    }
+
+    if (!this.privateKey) {
+      alert('Wallet no conectada');
+      throw new Error('Wallet no conectada');
+    }
+
+    if (!to || !amount) {
+      alert('Dirección y monto son requeridos');
+      throw new Error('Dirección y monto son requeridos');
+    }
+
+    if (!this.authWalletService.isAuthenticated()) {
+      alert('Debes autenticarte primero');
+      throw new Error('Usuario no autenticado');
+    }
+
+    const targetToken = token || this.currentToken();
+    if (!targetToken) throw new Error('No token seleccionado');
+
+    try {
+      this.providerStatus.set('Preparando transacción...');
+      
+      let toPublicKey;
+      try {
+        toPublicKey = new PublicKey(to);
+      } catch {
+        alert('Dirección de destino inválida');
+        throw new Error('Dirección de destino inválida');
+      }
+
+      const amountNum = parseFloat(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        alert('Monto inválido');
+        throw new Error('Monto inválido');
+      }
+
+      if (targetToken.isNative) {
+        // Transferencia nativa (existente)
+        const lamports = Math.floor(amountNum * LAMPORTS_PER_SOL);
+        const publicKey = this.privateKey;
+        const walletAdapter = this.walletAdapter;
+
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: toPublicKey,
+            lamports: lamports,
+          })
+        );
+
+        transaction.feePayer = publicKey;
+        const latestBlockhash = await this.connection.getLatestBlockhash();
+        transaction.recentBlockhash = latestBlockhash.blockhash;
+
+        this.providerStatus.set('Firmando transacción...');
+        const signedTransaction = await walletAdapter.signTransaction(transaction);
+        
+        this.providerStatus.set('Enviando transacción...');
+        const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
+        
+        await this.connection.confirmTransaction({
+          signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        });
+
+        const registro: Omit<TransactionType, 'id'> = {
+          from: this.privateKey.toString(),
+          to: to,
+          amount: amount,
+          currency: 'SOL',
+          txHash: signature,
+          timestamp: new Date(),
+          status: 'confirmed'
+        };
+
+        await this.firestoreService.addSolanaRegistro(registro);
+        console.log('Transacción guardada en Firestore (colección solana):', signature);
+
+        this.providerStatus.set('Transacción confirmada');
+        console.log('Transaction successful:', signature);
+        
+        setTimeout(() => {
+          this.refreshBalance();
+          this.refreshTokenBalances(); // ✅ Actualizar balances
+        }, 2000);
+        
+        return signature;
+      } else {
+        // ✅ NUEVO: Transferencia de token SPL
+        const signature = await this.tokenService.transferTokenSolana(
+          this.connection,
+          this.walletAdapter,
+          targetToken,
+          to,
+          amount
+        );
+
+        const registro: Omit<TransactionType, 'id'> = {
+          from: this.privateKey.toString(),
+          to: to,
+          amount: amount,
+          currency: targetToken.symbol,
+          txHash: signature,
+          timestamp: new Date(),
+          status: 'confirmed'
+        };
+
+        await this.firestoreService.addSolanaRegistro(registro);
+        console.log('Transacción SPL guardada en Firestore:', signature);
+
+        this.providerStatus.set('Transacción SPL confirmada');
+        
+        setTimeout(() => {
+          this.refreshTokenBalances(); // ✅ Actualizar balances
+        }, 2000);
+        
+        return signature;
+      }
+    } catch (error: any) {
+      console.error('Error sending Solana transaction:', error);
+      this.providerStatus.set('Error en transacción');
+      alert('Error: ' + (error.message || 'Unknown error'));
+      throw error;
+    }
+  }
+
+  // MÉTODOS EXISTENTES (se mantienen intactos)
   initProvider() {
     this.providerStatus.set('Buscando wallets Solana...');
     this.detectAvailableWallets();
@@ -149,9 +339,10 @@ export class SolanaWalletService implements OnDestroy {
 
   private handleAccountChanged(newPublicKey: PublicKey | null) {
     if (newPublicKey) {
-      this.publicKey = newPublicKey;
+      this.privateKey = newPublicKey;
       this.account.set(newPublicKey.toString());
       this.refreshBalance();
+      this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
       this.providerStatus.set('Cuenta cambiada');
       console.log('✅ [Solana] Account updated successfully');
     } else {
@@ -183,10 +374,11 @@ export class SolanaWalletService implements OnDestroy {
   }
 
   private handleWalletConnect(publicKey: PublicKey) {
-    this.publicKey = publicKey;
+    this.privateKey = publicKey;
     this.account.set(publicKey.toString());
     this.isConnected.set(true);
     this.refreshBalance();
+    this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
     this.providerStatus.set('Conectado');
   }
 
@@ -194,7 +386,8 @@ export class SolanaWalletService implements OnDestroy {
     this.account.set(null);
     this.balance.set('0');
     this.isConnected.set(false);
-    this.publicKey = null;
+    this.privateKey = null;
+    this.tokenBalances.set(new Map()); // ✅ Limpiar balances de tokens
     this.providerStatus.set('Desconectado');
     this.stopBalanceMonitoring();
     this.stopAccountMonitoring();
@@ -204,9 +397,11 @@ export class SolanaWalletService implements OnDestroy {
     this.stopBalanceMonitoring();
     
     this.refreshBalance();
+    this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
     
     this.balanceRefreshInterval = setInterval(() => {
       this.refreshBalance();
+      this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
     }, 30000);
     
     console.log('📊 [Solana] Balance monitoring started');
@@ -220,37 +415,37 @@ export class SolanaWalletService implements OnDestroy {
     }
   }
 
- async refreshBalance() {
-  if (!this.publicKey) {
-    this.balance.set('0');
-    return;
-  }
-  
-  const maxRetries = 3;
-  let attempt = 0;
-  while (attempt < maxRetries) {
-    try {
-      const balance = await this.connection.getBalance(this.publicKey);
-      const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
-      
-      if (this.balance() !== solBalance) {
-        this.balance.set(solBalance);
-        console.log('💰 [Solana] Balance updated:', solBalance, 'SOL');
-      }
-      return; // Éxito, salir
-    } catch (error: any) {
-      attempt++;
-      console.warn(`Advertencia: Intento ${attempt} fallido al obtener balance Solana:`, error.message);
-      if (attempt === maxRetries) {
-        console.error('❌ [Solana] Error final al obtener balance:', error);
-        this.balance.set('0'); // Mantener 0 si falla tras reintentos
-        this.providerStatus.set('Error al obtener balance, intenta de nuevo');
-      } else {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1s antes de reintentar
+  async refreshBalance() {
+    if (!this.privateKey) {
+      this.balance.set('0');
+      return;
+    }
+    
+    const maxRetries = 3;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        const balance = await this.connection.getBalance(this.privateKey);
+        const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
+        
+        if (this.balance() !== solBalance) {
+          this.balance.set(solBalance);
+          console.log('💰 [Solana] Balance updated:', solBalance, 'SOL');
+        }
+        return;
+      } catch (error: any) {
+        attempt++;
+        console.warn(`Advertencia: Intento ${attempt} fallido al obtener balance Solana:`, error.message);
+        if (attempt === maxRetries) {
+          console.error('❌ [Solana] Error final al obtener balance:', error);
+          this.balance.set('0');
+          this.providerStatus.set('Error al obtener balance, intenta de nuevo');
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
     }
   }
-}
 
   async selectWallet(walletName: string): Promise<boolean> {
     const wallets = this.availableWallets();
@@ -304,11 +499,12 @@ export class SolanaWalletService implements OnDestroy {
       }
 
       if (adapter.publicKey) {
-        this.publicKey = adapter.publicKey;
-        const publicKeyString = this.publicKey.toString();
+        this.privateKey = adapter.publicKey;
+        const publicKeyString = this.privateKey.toString();
         this.account.set(publicKeyString);
         this.isConnected.set(true);
         await this.refreshBalance();
+        await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
         this.providerStatus.set('Conectado a ' + this.walletName());
         return publicKeyString;
       }
@@ -317,102 +513,6 @@ export class SolanaWalletService implements OnDestroy {
     } catch (error) {
       console.error('Error connecting Solana wallet:', error);
       this.providerStatus.set('Error al conectar');
-      return null;
-    }
-  }
-
-  async sendTransaction(to: string, amount: string): Promise<string | null> {
-    if (!this.walletAdapter) {
-      alert('Selecciona una wallet primero');
-      this.showSelector();
-      return null;
-    }
-
-    if (!this.publicKey) {
-      alert('Wallet no conectada');
-      return null;
-    }
-
-    if (!to || !amount) {
-      alert('Dirección y monto son requeridos');
-      return null;
-    }
-
-    if (!this.authWalletService.isAuthenticated()) {
-      alert('Debes autenticarte primero');
-      return null;
-    }
-
-    try {
-      this.providerStatus.set('Preparando transacción...');
-      
-      let toPublicKey;
-      try {
-        toPublicKey = new PublicKey(to);
-      } catch {
-        alert('Dirección de destino inválida');
-        return null;
-      }
-
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum) || amountNum <= 0) {
-        alert('Monto inválido');
-        return null;
-      }
-      const lamports = Math.floor(amountNum * LAMPORTS_PER_SOL);
-
-      const publicKey = this.publicKey;
-      const walletAdapter = this.walletAdapter;
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: toPublicKey,
-          lamports: lamports,
-        })
-      );
-
-      transaction.feePayer = publicKey;
-      const latestBlockhash = await this.connection.getLatestBlockhash();
-      transaction.recentBlockhash = latestBlockhash.blockhash;
-
-      this.providerStatus.set('Firmando transacción...');
-      const signedTransaction = await walletAdapter.signTransaction(transaction);
-      
-      this.providerStatus.set('Enviando transacción...');
-      const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
-      
-      await this.connection.confirmTransaction({
-        signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      });
-
-      const registro: Omit<TransactionType, 'id'> = {
-        from: this.publicKey.toString(),
-        to: to,
-        amount: amount,
-        currency: 'SOL',
-        txHash: signature,
-        timestamp: new Date(),
-        status: 'confirmed'
-      };
-
-      await this.firestoreService.addSolanaRegistro(registro);
-      console.log('Transacción guardada en Firestore (colección solana):', signature);
-
-      this.providerStatus.set('Transacción confirmada');
-      console.log('Transaction successful:', signature);
-      
-      setTimeout(() => {
-        this.refreshBalance();
-      }, 2000);
-      
-      return signature;
-    } catch (error: any) {
-      console.error('Error sending Solana transaction:', error);
-      this.providerStatus.set('Error en transacción');
-      alert('Error: ' + (error.message || 'Unknown error'));
       return null;
     }
   }
@@ -429,7 +529,8 @@ export class SolanaWalletService implements OnDestroy {
     this.account.set(null);
     this.balance.set('0');
     this.isConnected.set(false);
-    this.publicKey = null;
+    this.privateKey = null;
+    this.tokenBalances.set(new Map()); // ✅ Limpiar balances de tokens
     this.walletName.set('');
     this.providerStatus.set('Desconectado');
     this.showWalletSelector.set(false);
@@ -442,15 +543,19 @@ export class SolanaWalletService implements OnDestroy {
     console.log('Connected:', this.isConnected());
     console.log('Wallet Name:', this.walletName());
     console.log('Status:', this.providerStatus());
-    console.log('Public Key:', this.publicKey ? this.publicKey.toString() : 'null');
+    console.log('Public Key:', this.privateKey ? this.privateKey.toString() : 'null');
     console.log('Available Wallets:', this.availableWallets());
     console.log('Show Selector:', this.showWalletSelector());
+    console.log('Current Token:', this.currentToken());
+    console.log('Available Tokens:', this.availableTokens());
+    console.log('Token Balances:', this.tokenBalances());
     console.log('================================');
   }
 
   async forceBalanceRefresh() {
     console.log('🔄 [Solana] Forcing balance refresh');
     await this.refreshBalance();
+    await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
   }
 
   async forceAccountCheck() {
@@ -461,10 +566,10 @@ export class SolanaWalletService implements OnDestroy {
   }
 
   getPublicKeyString(): string | null {
-    return this.publicKey ? this.publicKey.toString() : null;
+    return this.privateKey ? this.privateKey.toString() : null;
   }
 
   isProperlyConnected(): boolean {
-    return this.isConnected() && this.publicKey !== null && this.walletAdapter !== null;
+    return this.isConnected() && this.privateKey !== null && this.walletAdapter !== null;
   }
 }

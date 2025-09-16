@@ -20,6 +20,9 @@ import { environment } from '../../../environments/environment';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
 import { getChainById } from '../helpers/chains.helper';
 import { Transaction } from '../../types/types';
+import { TokenService } from '../tokens/services/token-service';
+import { TokenRegistryService } from '../tokens/services/token-registry';
+import { Token } from '../models/token.model';
 
 @Injectable({ providedIn: 'root' })
 export class AuthWalletService implements OnDestroy {
@@ -39,6 +42,11 @@ export class AuthWalletService implements OnDestroy {
   firebaseUser = signal<User | null>(null);
   providerStatus = signal<string>('No inicializado');
 
+  // ✅ NUEVAS SIGNALS PARA TOKENS
+  currentToken = signal<Token | null>(null);
+  availableTokens = signal<Token[]>([]);
+  tokenBalances = signal<Map<string, string>>(new Map());
+
   // Nuevas signals para autenticación social
   isAdmin = signal<boolean>(false);
   errorMessage = signal<string | null>(null);
@@ -50,6 +58,10 @@ export class AuthWalletService implements OnDestroy {
   private readonly AUTH_TOKEN_KEY = 'firebase_custom_token';
   private readonly ANON_UUID_KEY = 'anonymous_uuid';
   private authStateUnsubscribe: (() => void) | null = null;
+
+  // ✅ NUEVAS DEPENDENCIAS
+  private tokenService = inject(TokenService);
+  private tokenRegistry = inject(TokenRegistryService);
 
   constructor(
     private http: HttpClient,
@@ -68,8 +80,18 @@ export class AuthWalletService implements OnDestroy {
     effect(async () => {
       if (this.account() && this.provider) {
         await this.refreshBalance();
+        await this.refreshTokenBalances(); // ✅ NUEVO: Actualizar balances de tokens
       } else {
         this.balance.set('0');
+        this.tokenBalances.set(new Map()); // ✅ Limpiar balances de tokens
+      }
+    });
+
+    // ✅ NUEVO EFFECT para cargar tokens cuando cambia la chain
+    effect(() => {
+      const chainId = this.chainId();
+      if (chainId) {
+        this.loadAvailableTokens();
       }
     });
 
@@ -84,7 +106,107 @@ export class AuthWalletService implements OnDestroy {
     }
   }
 
-  // MÉTODOS EXISTENTES DE WALLET
+  // ✅ NUEVO MÉTODO: Cargar tokens disponibles
+  private loadAvailableTokens() {
+    if (!this.chainId()) return;
+    
+    const tokens = this.tokenRegistry.getTokens(this.chainId()!);
+    this.availableTokens.set(tokens);
+    
+    // Seleccionar token nativo por defecto
+    const nativeToken = tokens.find(t => t.isNative);
+    if (nativeToken) {
+      this.currentToken.set(nativeToken);
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Actualizar balances de tokens
+  async refreshTokenBalances() {
+    if (!this.account() || !this.provider || !this.chainId()) return;
+
+    try {
+      const balances = await this.tokenService.getTokenBalancesEVM(
+        this.provider,
+        this.account()!,
+        this.chainId()!
+      );
+
+      // Actualizar mapa de balances
+      const newBalances = new Map<string, string>();
+      balances.forEach(tokenBalance => {
+        newBalances.set(tokenBalance.token.address, tokenBalance.formattedBalance);
+      });
+      
+      this.tokenBalances.set(newBalances);
+    } catch (error) {
+      console.error('Error refreshing token balances:', error);
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Obtener balance de un token específico
+  getTokenBalance(tokenAddress: string): string {
+    return this.tokenBalances().get(tokenAddress) || '0';
+  }
+
+  // ✅ NUEVO MÉTODO: Transferir tokens ERC-20
+  async transferToken(to: string, amount: string, token?: Token): Promise<ethers.TransactionResponse> {
+    if (!this.signer) throw new Error('No signer disponible');
+    if (!isAddress(to)) throw new Error('Dirección inválida');
+    
+    const targetToken = token || this.currentToken();
+    if (!targetToken) throw new Error('No token seleccionado');
+
+    // ✅ Validar formato del amount
+    const amountString = typeof amount === 'string' ? amount : String(amount);
+    if (!/^\d+(\.\d+)?$/.test(amountString)) {
+      throw new Error('Formato de monto inválido. Use números con punto decimal');
+    }
+
+    if (targetToken.isNative) {
+      // Transferencia nativa (existente)
+      const amountWei = parseEther(amountString);
+      const balanceWei = await this.provider!.getBalance(this.account()!);
+      if (balanceWei < amountWei) throw new Error('Saldo insuficiente');
+
+      const tx = await this.signer.sendTransaction({ to, value: amountWei });
+
+      const registro: Omit<Transaction, 'id'> = {
+        from: this.account()!,
+        to: to,
+        amount: amountString,
+        currency: this.chainSymbol(),
+        txHash: tx.hash,
+        timestamp: new Date(),
+        status: 'pending'
+      };
+
+      await this.firestoreService.addRegistro(registro);
+      return tx;
+    } else {
+      // ✅ NUEVO: Transferencia de token ERC-20
+      const tx = await this.tokenService.transferTokenEVM(
+        this.signer,
+        targetToken,
+        to,
+        amountString
+      );
+
+      const registro: Omit<Transaction, 'id'> = {
+        from: this.account()!,
+        to: to,
+        amount: amountString,
+        currency: targetToken.symbol,
+        txHash: tx.hash,
+        timestamp: new Date(),
+        status: 'pending'
+      };
+
+      await this.firestoreService.addRegistro(registro);
+      return tx;
+    }
+  }
+
+  // MÉTODOS EXISTENTES DE WALLET (se mantienen intactos)
   debugService() {
     console.log('=== DEBUG AuthWalletService ===');
     console.log('Provider:', this.provider);
@@ -96,6 +218,9 @@ export class AuthWalletService implements OnDestroy {
     console.log('ProviderStatus:', this.providerStatus());
     console.log('IsAdmin:', this.isAdmin());
     console.log('FirebaseUser:', this.firebaseUser());
+    console.log('Current Token:', this.currentToken());
+    console.log('Available Tokens:', this.availableTokens());
+    console.log('Token Balances:', this.tokenBalances());
     console.log('================================');
   }
 
@@ -109,7 +234,6 @@ export class AuthWalletService implements OnDestroy {
         const idTokenResult = await user.getIdTokenResult();
         const claims = idTokenResult.claims;
         
-        // ✅ CORRECCIÓN: Acceso por corchetes para la propiedad 'admin'
         this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
         
         user.getIdToken().then(token => {
@@ -156,8 +280,6 @@ export class AuthWalletService implements OnDestroy {
     this.firebaseUser.set(null);
     this.isAdmin.set(false);
     
-    // ✅ NO limpiar el estado de la wallet conectada
-    // La wallet MetaMask/Solana puede permanecer conectada independientemente de la autenticación Firebase
     console.log('Sesión Firebase cerrada, pero wallet puede permanecer conectada');
   }
 
@@ -183,14 +305,12 @@ export class AuthWalletService implements OnDestroy {
 
   async logout() {
     try {
-      // ✅ Guardar estado de la wallet antes de cerrar sesión
       const wasWalletConnected = !!this.account();
       
       await signOut(this.auth);
       this.cleanupAuth();
       
       console.log('Sesión cerrada. Wallet estaba conectada:', wasWalletConnected);
-      // La wallet MetaMask permanece conectada, solo cerramos sesión Firebase
       
     } catch (error) {
       console.error('Error cerrando sesión:', error);
@@ -216,12 +336,14 @@ export class AuthWalletService implements OnDestroy {
         this.chainSymbol.set(chainInfo?.symbol || 'ETH');
         if (this.provider) this.signer = await this.provider.getSigner();
         await this.refreshBalance();
+        await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
       });
 
       ethereum.on('disconnect', () => {
         this.account.set(null);
         this.signer = null;
         this.balance.set('0');
+        this.tokenBalances.set(new Map());
       });
     } else {
       this.providerStatus.set('No se detectó MetaMask');
@@ -254,6 +376,7 @@ export class AuthWalletService implements OnDestroy {
       this.chainSymbol.set(chainInfo?.symbol || 'ETH');
 
       await this.refreshBalance();
+      await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
       
       console.log('Wallet conectada:', account);
       return account;
@@ -277,41 +400,6 @@ export class AuthWalletService implements OnDestroy {
     this.balance.set(formatEther(b));
   }
 
-  async sendTransaction(to: string, value: string) {
-    if (!this.signer) throw new Error('No signer disponible');
-    if (!isAddress(to)) throw new Error('Dirección inválida');
-    
-    // ✅ CORRECCIÓN: Asegurar que value sea string
-    const valueString = typeof value === 'string' ? value : String(value);
-    
-    // ✅ Validar formato del amount
-    if (!/^\d+(\.\d+)?$/.test(valueString)) {
-      throw new Error('Formato de monto inválido. Use números con punto decimal');
-    }
-    
-    const amount = parseEther(valueString);
-
-    const balanceWei = await this.provider!.getBalance(this.account()!);
-    if (balanceWei < amount) throw new Error('Saldo insuficiente');
-
-    const tx = await this.signer.sendTransaction({ to, value: amount });
-
-    const registro: Omit<Transaction, 'id'> = {
-      from: this.account()!,
-      to: to,
-      amount: valueString, // ✅ Usar el string validado
-      currency: this.chainSymbol(),
-      txHash: tx.hash,
-      timestamp: new Date(),
-      status: 'pending'
-    };
-
-    await this.firestoreService.addRegistro(registro);
-    console.log('Transacción guardada en Firestore');
-
-    return tx;
-  }
-
   async switchChain(targetChainId: number): Promise<boolean> {
     if (!this.provider) return false;
     const ethereum = (window as any).ethereum;
@@ -331,6 +419,7 @@ export class AuthWalletService implements OnDestroy {
       this.chainSymbol.set(chain?.symbol || 'ETH');
 
       await this.refreshBalance();
+      await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
       return true;
     } catch (switchError: any) {
       if (switchError.code === 4902) {
@@ -352,6 +441,7 @@ export class AuthWalletService implements OnDestroy {
           this.chainId.set(targetChainId);
           this.chainSymbol.set(chainInfo.symbol || 'ETH');
           await this.refreshBalance();
+          await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
           return true;
         } catch (err) {
           console.error('Failed to add chain:', err);
@@ -366,31 +456,29 @@ export class AuthWalletService implements OnDestroy {
 
   // NUEVOS MÉTODOS DE AUTENTICACIÓN SOCIAL
   async signInWithGoogle() {
-  try {
-    // ✅ Cerrar sesión existente primero si está autenticado
-    if (this.isAuthenticated()) {
-      console.log('🔒 Cerrando sesión previa...');
-      await this.logout();
+    try {
+      if (this.isAuthenticated()) {
+        console.log('🔒 Cerrando sesión previa...');
+        await this.logout();
+      }
+
+      this.errorMessage.set(null);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(this.auth, provider);
+      const user = result.user;
+      
+      const idTokenResult = await user.getIdTokenResult();
+      const claims = idTokenResult.claims;
+      
+      this.isAdmin.set(claims['admin'] === true);
+      console.log('✅ Usuario autenticado con Google:', user);
+      
+    } catch (error: any) {
+      console.error('❌ Error en login con Google:', error);
+      this.errorMessage.set(error.message);
     }
-
-    this.errorMessage.set(null);
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(this.auth, provider);
-    const user = result.user;
-    
-    const idTokenResult = await user.getIdTokenResult();
-    const claims = idTokenResult.claims;
-    
-    this.isAdmin.set(claims['admin'] === true);
-    console.log('✅ Usuario autenticado con Google:', user);
-    
-  } catch (error: any) {
-    console.error('❌ Error en login con Google:', error);
-    this.errorMessage.set(error.message);
   }
-}
 
-  // Método alternativo para login anónimo (complementario)
   async loginAnonymousAlt(uuid: string) {
     try {
       this.errorMessage.set(null);

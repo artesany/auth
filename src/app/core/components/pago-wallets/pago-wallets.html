@@ -21,6 +21,19 @@
   <button (click)="debugService()">Debug</button>
 </div>
 
+<!-- ✅ NUEVO: Selector de Token -->
+<div class="token-selector" *ngIf="availableTokens().length > 0">
+  <h4>Seleccionar Token</h4>
+  <select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)" class="token-dropdown">
+    <option *ngFor="let token of availableTokens()" [ngValue]="token">
+      {{ token.symbol }} - {{ token.name }}
+      <span *ngIf="tokenBalances().get(token.address)">
+        ({{ tokenBalances().get(token.address) }})
+      </span>
+    </option>
+  </select>
+</div>
+
 <div class="auth-section">
   <div *ngIf="isAuthenticated">
     <p>Autenticado como: {{ firebaseUser?.email || 'Usuario anónimo' }} <span *ngIf="isAdmin">👑 Admin</span></p>
@@ -94,6 +107,12 @@
   <p>Cuenta: {{ account }}</p>
   <p>Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
   <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
+  
+  <!-- ✅ NUEVO: Balance del Token Seleccionado -->
+  <div *ngIf="currentToken()">
+    <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
+  </div>
+  
   <div>
     <h4>Cambiar Red</h4>
     <select (change)="switchChain($any($event.target).value)">
@@ -106,7 +125,7 @@
       <p>No hay dirección administrativa configurada.</p>
     </div>
     <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001"> <!-- ✅ Cambiado a type="text" -->
+    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001">
     <button [disabled]="!isAuthenticated || !isHardcoded()" (click)="sendTransaction(to, amount)">
       {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
     </button>
@@ -119,15 +138,21 @@
     <p>Wallet: {{ solanaWalletName }}</p>
     <p>Cuenta: {{ solanaAccount }}</p>
     <p>Saldo: {{ solanaBalance }} SOL</p>
+    
+    <!-- ✅ NUEVO: Balance del Token Seleccionado -->
+    <div *ngIf="currentToken()">
+      <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
+    </div>
+    
     <div>
-      <h4>Enviar SOL</h4>
+      <h4>Enviar</h4>
       <div *ngIf="!isHardcoded()">
         <p>No hay dirección administrativa configurada.</p>
       </div>
       <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-      <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001"> <!-- ✅ Cambiado a type="text" -->
+      <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001">
       <button [disabled]="!solanaConnected || !isHardcoded()" (click)="sendTransaction(to, amount)">
-        {{ !solanaConnected ? '🔒 Conecta wallet primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar SOL' }}
+        {{ !solanaConnected ? '🔒 Conecta wallet primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
       </button>
     </div>
   </div>
