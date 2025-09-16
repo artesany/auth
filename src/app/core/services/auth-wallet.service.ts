@@ -1,4 +1,4 @@
-import { Injectable, signal, effect, inject, OnDestroy } from '@angular/core';
+import { Injectable, signal, effect, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ethers, BrowserProvider, isAddress, parseEther, formatEther } from 'ethers';
@@ -60,12 +60,14 @@ export class AuthWalletService implements OnDestroy {
   private authStateUnsubscribe: (() => void) | null = null;
 
   // ✅ NUEVAS DEPENDENCIAS
-  private tokenService = inject(TokenService);
-  private tokenRegistry = inject(TokenRegistryService);
+  // private tokenService = inject(TokenService);
+  // private tokenRegistry = inject(TokenRegistryService);
 
   constructor(
     private http: HttpClient,
-    private firestoreService: FirestoreService
+    private firestoreService: FirestoreService,
+      private tokenService: TokenService,        // ✅ Inyectar normalmente
+    private tokenRegistry: TokenRegistryService // ✅ Inyectar normalmente
   ) {
     // Effects existentes
     effect(() => {

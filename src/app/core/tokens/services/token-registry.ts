@@ -2,7 +2,9 @@ import { Injectable } from '@angular/core';
 import { Token, TOKEN_LISTS, SOLANA_TOKEN_LISTS, SOLANA_COMMON_TOKENS, SOLANA_NETWORKS, detectAddressType, SolanaHelpers, EthereumHelpers } from '../../helpers/abi.helper';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { ethers, Contract } from 'ethers';
-import { getMint } from '@solana/spl-token';
+
+// ✅ SOLUCIÓN CORRECTA - Importar desde el entry point principal
+import * as splToken from '@solana/spl-token';
 
 // Interfaz específica para metadatos de token ERC-20, sin extender ethers.Contract
 interface IERC20Metadata {
@@ -127,16 +129,37 @@ export class TokenRegistryService {
 
       const publicKey = new PublicKey(address);
       
-      // Obtener información del mint
-      const mintInfo = await getMint(connection, publicKey);
+      // ✅ SOLUCIÓN: Usar la API correcta según la versión
+      let decimals = 6; // Valor por defecto
       
-      // En Solana, los metadatos como name y symbol requieren el programa de metadatos
-      // Usamos valores predeterminados si no hay metadatos disponibles
+      try {
+        // Intentar con versión moderna (0.3.x+)
+        const mintInfo = await (splToken as any).getMint(connection, publicKey);
+        decimals = mintInfo.decimals;
+      } catch (error) {
+        console.warn('Error with getMint, trying alternative approach...');
+        
+        // Fallback para versiones antiguas
+        try {
+          // Para versiones < 0.3.0, usar Token class
+          const token = new (splToken as any).Token(connection, publicKey, splToken.TOKEN_PROGRAM_ID, null);
+          const mintInfo = await token.getMintInfo();
+          decimals = mintInfo.decimals;
+        } catch (fallbackError) {
+          console.warn('Fallback also failed, using default decimals:', fallbackError);
+          // Último fallback: obtener info de la cuenta directamente
+          const accountInfo = await connection.getAccountInfo(publicKey);
+          if (accountInfo && accountInfo.data.length > 44) {
+            decimals = accountInfo.data[44];
+          }
+        }
+      }
+      
       return {
         address,
         name: 'Unknown SPL Token',
         symbol: 'UNKNOWN',
-        decimals: mintInfo.decimals,
+        decimals: decimals,
         chainId: SOLANA_NETWORKS['mainnet-beta'].chainId,
         logoURI: undefined
       };

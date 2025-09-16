@@ -13,7 +13,7 @@ import { Connection } from '@solana/web3.js';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './token-selector.html',
-  styleUrls: ['./token-selector.css']
+  styleUrls: ['./token-selector.scss']
 })
 export class TokenSelector implements OnInit, OnDestroy {
   @Input() blockchain: 'ethereum' | 'solana' = 'ethereum';
