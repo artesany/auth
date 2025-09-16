@@ -1,4 +1,4 @@
-import { Component, OnInit, effect, signal } from '@angular/core';
+import { Component, OnInit, effect, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthWalletService } from '../../services/auth-wallet.service';
@@ -6,7 +6,7 @@ import { SolanaWalletService } from '../../../core-sol/services/solana-wallet.se
 import { FirestoreService } from '../../../core-prueba/services-prueba/firestore.service';
 import { CHAINS, getChainById } from '../../helpers/chains.helper';
 import { Transaction } from '../../../types/types';
-import { Timestamp, getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Timestamp, getFirestore, doc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 
 @Component({
   selector: 'app-pago-wallets',
@@ -14,13 +14,13 @@ import { Timestamp, getFirestore, doc, getDoc, setDoc } from 'firebase/firestore
   imports: [CommonModule, FormsModule],
   templateUrl: './pago-wallets.html'
 })
-export class PagoWallets implements OnInit {
+export class PagoWallets implements OnInit, OnDestroy {
   token: string | null = null;
   account: string | null = null;
   chainId: number | null = null;
   chainSymbol: string = 'ETH';
   balance: string = '0';
-  amount: string = '0';
+  amount: string | number = '0';
   to: string = '';
   solanaAccount: string | null = null;
   solanaBalance: string = '0';
@@ -36,11 +36,10 @@ export class PagoWallets implements OnInit {
   showSolanaSelector: boolean = false;
   ethTransactions = signal<Transaction[]>([]);
   solanaTransactions = signal<Transaction[]>([]);
-
-  // ✅ NUEVAS SIGNALS PARA WALLET ADMINISTRATIVA
   isAdmin = signal<boolean>(false);
   adminTo = signal<string | null>(null);
   isHardcoded = signal<boolean>(false);
+  private walletListener: Unsubscribe | null = null;
 
   constructor(
     public authWallet: AuthWalletService,
@@ -65,8 +64,6 @@ export class PagoWallets implements OnInit {
       this.isAuthenticated = this.authWallet.isAuthenticated();
       this.firebaseUser = this.authWallet.firebaseUser();
       this.providerStatus = this.authWallet.providerStatus();
-      
-      // ✅ NUEVO: Sincronizar estado de admin
       this.isAdmin.set(this.authWallet.isAdmin());
     });
   }
@@ -75,9 +72,14 @@ export class PagoWallets implements OnInit {
     this.authWallet.initProvider();
     this.solanaWallet.initProvider();
     this.loadTransactions();
-    
-    // ✅ NUEVO: Cargar dirección administrativa
     await this.loadWalletAddress(this.currentBlockchain());
+  }
+
+  ngOnDestroy() {
+    if (this.walletListener) {
+      this.walletListener();
+      this.walletListener = null;
+    }
   }
 
   async loadTransactions() {
@@ -118,10 +120,7 @@ export class PagoWallets implements OnInit {
 
   async selectBlockchain(blockchain: 'ethereum' | 'solana') {
     this.currentBlockchain.set(blockchain);
-    
-    // ✅ NUEVO: Cargar dirección administrativa para la blockchain seleccionada
     await this.loadWalletAddress(blockchain);
-    
     if (blockchain === 'solana' && !this.isAuthenticated) {
       const uuid = localStorage.getItem('anonymous_uuid') || this.generateUUID();
       this.authWallet.loginAnonymous(uuid).catch(error => {
@@ -135,25 +134,35 @@ export class PagoWallets implements OnInit {
     this.loadTransactions();
   }
 
-  // ✅ NUEVO MÉTODO: Cargar dirección administrativa desde Firestore
   async loadWalletAddress(blockchain: 'ethereum' | 'solana') {
     try {
       const db = getFirestore();
-      const walletDoc = await getDoc(doc(db, 'wallets', blockchain));
-      if (walletDoc.exists()) {
-        const data = walletDoc.data();
-        this.adminTo.set(data['address']);
-        this.isHardcoded.set(data['enabled']);
-      } else {
+      if (this.walletListener) {
+        this.walletListener();
+      }
+      this.walletListener = onSnapshot(doc(db, 'wallets', blockchain), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          this.adminTo.set(data['address'] || null);
+          this.isHardcoded.set(data['enabled'] || false);
+        } else {
+          this.adminTo.set(null);
+          this.isHardcoded.set(false);
+        }
+      }, (error) => {
+        console.error('Error listening to wallet:', error);
         this.adminTo.set(null);
         this.isHardcoded.set(false);
-      }
+        alert('Error al cargar dirección administrativa');
+      });
     } catch (error) {
       console.error('Error loading wallet:', error);
+      this.adminTo.set(null);
+      this.isHardcoded.set(false);
+      alert('Error al cargar dirección administrativa');
     }
   }
 
-  // ✅ NUEVO MÉTODO: Resetear dirección administrativa
   async resetAdminTo() {
     if (this.isAdmin()) {
       try {
@@ -216,18 +225,23 @@ export class PagoWallets implements OnInit {
     this.solanaWallet.hideSelector();
   }
 
-  async switchChain(chainId: number) {
+  async switchChain(chainId: string) {
     if (this.currentBlockchain() === 'ethereum') {
-      const success = await this.authWallet.switchChain(chainId);
+      const success = await this.authWallet.switchChain(Number(chainId));
       if (!success) {
         alert(`No se pudo cambiar a la red ${chainId}`);
       }
     }
   }
 
-  async sendTransaction(to: string, amount: string) {
+  async sendTransaction(to: string, amount: string | number) {
     try {
-      // ✅ MODIFICADO: Usar dirección administrativa si está habilitada
+      const amountStr = String(amount).trim();
+      if (!amountStr || parseFloat(amountStr) <= 0) {
+        alert('Monto inválido: debe ser mayor a 0');
+        return;
+      }
+      
       const destination = this.isHardcoded() && this.adminTo() ? this.adminTo()! : to;
       
       if (this.currentBlockchain() === 'ethereum') {
@@ -235,15 +249,14 @@ export class PagoWallets implements OnInit {
           alert('Debes estar autenticado para enviar transacciones Ethereum');
           return;
         }
-        await this.authWallet.sendTransaction(destination, amount);
+        await this.authWallet.sendTransaction(destination, amountStr);
       } else {
         if (!this.solanaConnected) {
           alert('Debes conectar tu wallet Solana primero');
           return;
         }
-        await this.solanaWallet.sendTransaction(destination, amount);
+        await this.solanaWallet.sendTransaction(destination, amountStr);
       }
-      
       this.to = '';
       this.amount = '0';
       alert('Transacción enviada exitosamente');
@@ -254,11 +267,15 @@ export class PagoWallets implements OnInit {
   }
 
   debugService() {
+    console.log('=== DEBUG PagoWallets ===');
+    console.log('Blockchain actual:', this.currentBlockchain());
+    console.log('Amount type:', typeof this.amount);
     if (this.currentBlockchain() === 'ethereum') {
       this.authWallet.debugService();
     } else {
       this.solanaWallet.debugService();
     }
+    console.log('================================');
   }
 
   private generateUUID(): string {

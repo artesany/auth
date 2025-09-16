@@ -8,7 +8,6 @@ import { AuthWalletService } from '../../core/services/auth-wallet.service';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
 import { Transaction as TransactionType } from '../../types/types';
 
-// Definir tipos específicos para los eventos del wallet
 type WalletEvent = 'connect' | 'disconnect' | 'accountChanged' | 'error';
 type WalletEventListener = (...args: any[]) => void;
 
@@ -207,7 +206,7 @@ export class SolanaWalletService implements OnDestroy {
     
     this.balanceRefreshInterval = setInterval(() => {
       this.refreshBalance();
-    }, 30000);
+    }, 60000); // Cambiado a 60 segundos
     
     console.log('📊 [Solana] Balance monitoring started');
   }
@@ -226,16 +225,29 @@ export class SolanaWalletService implements OnDestroy {
       return;
     }
     
-    try {
-      const balance = await this.connection.getBalance(this.publicKey);
-      const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
-      
-      if (this.balance() !== solBalance) {
-        this.balance.set(solBalance);
-        console.log('💰 [Solana] Balance updated:', solBalance, 'SOL');
+    const maxRetries = 3;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        const balance = await this.connection.getBalance(this.publicKey);
+        const solBalance = (balance / LAMPORTS_PER_SOL).toFixed(4);
+        
+        if (this.balance() !== solBalance) {
+          this.balance.set(solBalance);
+          console.log('💰 [Solana] Balance updated:', solBalance, 'SOL');
+        }
+        return;
+      } catch (error: any) {
+        attempt++;
+        console.warn(`Advertencia: Intento ${attempt} fallido al obtener balance Solana:`, error.message);
+        if (attempt === maxRetries) {
+          console.error('❌ [Solana] Error final al obtener balance:', error);
+          this.balance.set('0');
+          this.providerStatus.set('Error al obtener balance, intenta de nuevo');
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-    } catch (error) {
-      console.error('❌ [Solana] Error fetching balance:', error);
     }
   }
 
@@ -308,7 +320,7 @@ export class SolanaWalletService implements OnDestroy {
     }
   }
 
-  async sendTransaction(to: string, amount: string): Promise<string | null> {
+  async sendTransaction(to: string, amount: string) {
     if (!this.walletAdapter) {
       alert('Selecciona una wallet primero');
       this.showSelector();
@@ -341,7 +353,8 @@ export class SolanaWalletService implements OnDestroy {
         return null;
       }
 
-      const amountNum = parseFloat(amount);
+      const amountStr = String(amount).trim();
+      const amountNum = parseFloat(amountStr);
       if (isNaN(amountNum) || amountNum <= 0) {
         alert('Monto inválido');
         return null;
@@ -378,7 +391,7 @@ export class SolanaWalletService implements OnDestroy {
       const registro: Omit<TransactionType, 'id'> = {
         from: this.publicKey.toString(),
         to: to,
-        amount: amount,
+        amount: amountStr,
         currency: 'SOL',
         txHash: signature,
         timestamp: new Date(),

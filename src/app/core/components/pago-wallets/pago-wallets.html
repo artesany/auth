@@ -1,272 +1,144 @@
-<style>
-  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-  th { background-color: #f2f2f2; }
-  a { color: #007bff; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .auth-section { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-  .admin-badge { background: #ffc107; color: #000; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
-</style>
-
-<div>
-  <!-- Modal para selección de wallet Solana -->
-  <div *ngIf="showSolanaSelector">
-    <div>
-      <h3>Seleccionar Wallet Solana</h3>
-      <p>Elige cómo quieres conectarte:</p>
-      
-      <div>
-        <button 
-          *ngFor="let wallet of solanaWallets"
-          (click)="selectSolanaWallet(wallet.name)"
-        >
-          {{ wallet.icon }} {{ wallet.name }}
-        </button>
-      </div>
-
-      <button (click)="cancelWalletSelection()">
-        Cancelar
-      </button>
-    </div>
-  </div>
-
-  <!-- Selector de Blockchain -->
-  <div>
-    <h3>Seleccionar Blockchain</h3>
-    <div>
-      <button (click)="selectBlockchain('ethereum')">
-        Ethereum
-      </button>
-      <button (click)="selectBlockchain('solana')">
-        Conectar Wallet Solana
-      </button>
-    </div>
-    <p>
-      Modo: <strong>{{ currentBlockchain() === 'ethereum' ? 'Ethereum' : 'Solana' }}</strong>
-    </p>
-  </div>
-
-  <!-- Debug Info -->
-  <div>
-    <p>
-      <strong>Estado:</strong> 
-      {{ currentBlockchain() === 'ethereum' ? providerStatus : solanaProviderStatus }}
-    </p>
-    <button (click)="debugService()">
-      Debug
+<div *ngIf="showSolanaSelector" class="wallet-selector">
+  <h3>Seleccionar Wallet Solana</h3>
+  <p>Elige cómo quieres conectarte:</p>
+  <div class="wallet-options">
+    <button *ngFor="let wallet of solanaWallets" (click)="selectSolanaWallet(wallet.name)">
+      {{ wallet.icon }} {{ wallet.name }}
     </button>
   </div>
+  <button (click)="cancelWalletSelection()">Cancelar</button>
+</div>
 
-  <!-- Sección de Autenticación Mejorada -->
-  <div class="auth-section">
-    <h3>Autenticación</h3>
-    
-    <div *ngIf="isAuthenticated; else notAuthenticated">
-      <p>
-        <strong>Autenticado como:</strong> 
-        {{ firebaseUser?.email || 'Usuario anónimo' }}
-        <span *ngIf="authWallet.isAdmin()" class="admin-badge">👑 Admin</span>
-      </p>
-      <p><small>UID: {{ firebaseUser?.uid }}</small></p>
-      
-      <button (click)="logout()" style="background: #dc3545; color: white;">
-        🚪 Cerrar sesión
-      </button>
-      
-      <div *ngIf="authWallet.isAdmin()">
-        <p><strong>Funciones de administrador:</strong></p>
-        <button (click)="authWallet.debugService()" style="background: #6c757d; color: white; margin-top: 5px;">
-          🔧 Debug Admin
-        </button>
-      </div>
-    </div>
-    
-    <ng-template #notAuthenticated>
-      <p>No autenticado - Elige cómo quieres continuar:</p>
-      <div>
-        <button (click)="authWallet.signInWithGoogle()" 
-                style="background: #4285F4; color: white; margin-right: 10px;">
-          🚀 Iniciar con Google
-        </button>
-        
-        <button (click)="loginAnonymous()" 
-                style="background: #6c757d; color: white;">
-          🔒 Pagar anónimamente
-        </button>
-      </div>
-      
-      <p><small>* Google te permite guardar tu historial de transacciones</small></p>
-    </ng-template>
-  </div>
+<div class="blockchain-selector">
+  <h3>Seleccionar Blockchain</h3>
+  <button (click)="selectBlockchain('ethereum')">Ethereum</button>
+  <button (click)="selectBlockchain('solana')">Conectar Wallet Solana</button>
+  <p>Modo: {{ currentBlockchain() === 'ethereum' ? 'Ethereum' : 'Solana' }}</p>
+</div>
 
-  <!-- Tabla de Transacciones Ethereum -->
-  <div *ngIf="currentBlockchain() === 'ethereum'">
-    <h3>Transacciones Ethereum</h3>
-    <table *ngIf="ethTransactions().length > 0; else noEthTransactions">
-      <thead>
-        <tr>
-          <th>Click para ver estado actual de la transaccion</th>
-          <th>De</th>
-          <th>A</th>
-          <th>Monto</th>
-          <th>Moneda</th>
-          <th>Fecha</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let tx of ethTransactions()">
-          <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
-          <td>{{ tx.from | slice:0:10 }}...</td>
-          <td>{{ tx.to | slice:0:10 }}...</td>
-          <td>{{ tx.amount }}</td>
-          <td>{{ tx.currency }}</td>
-          <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
-          <td>{{ tx.status }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <ng-template #noEthTransactions>
-      <p>No hay transacciones Ethereum.</p>
-    </ng-template>
-  </div>
+<div class="status">
+  <p>Estado: {{ currentBlockchain() === 'ethereum' ? providerStatus : solanaProviderStatus }}</p>
+  <button (click)="debugService()">Debug</button>
+</div>
 
-  <!-- Tabla de Transacciones Solana -->
-  <div *ngIf="currentBlockchain() === 'solana'">
-    <h3>Transacciones Solana</h3>
-    <table *ngIf="solanaTransactions().length > 0; else noSolanaTransactions">
-      <thead>
-        <tr>
-          <th>Tx Hash</th>
-          <th>De</th>
-          <th>A</th>
-          <th>Monto</th>
-          <th>Moneda</th>
-          <th>Fecha</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let tx of solanaTransactions()">
-          <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
-          <td>{{ tx.from | slice:0:10 }}...</td>
-          <td>{{ tx.to | slice:0:10 }}...</td>
-          <td>{{ tx.amount }}</td>
-          <td>{{ tx.currency }}</td>
-          <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
-          <td>{{ tx.status }}</td>
-        </tr>
-      </tbody>
-    </table>
-    <ng-template #noSolanaTransactions>
-      <p>No hay transacciones Solana.</p>
-    </ng-template>
-  </div>
-
-  <!-- Sección de Ethereum -->
-  <div *ngIf="currentBlockchain() === 'ethereum'">
-    <!-- Wallet info Ethereum -->
-    <div *ngIf="account; else connectWalletTemplate">
-      <h3>Ethereum Wallet</h3>
-      <p>Cuenta: {{ account }}</p>
-      <p>Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
-      <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
-
-      <!-- Selector de Red -->
-      <div>
-        <h4>Cambiar Red</h4>
-        <div>
-          <button 
-            *ngFor="let chain of availableChains" 
-            (click)="switchChain(chain.id)"
-            style="margin: 2px; padding: 5px 10px;"
-          >
-            {{ chain.name }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Enviar transacción Ethereum -->
-      <div>
-        <h4>Enviar</h4>
-        <input 
-          [(ngModel)]="to" 
-          placeholder="Dirección destino (0x...)" 
-          style="margin: 5px; padding: 8px; width: 300px;"
-        />
-        <br>
-        <input 
-          [(ngModel)]="amount" 
-          placeholder="Cantidad {{ chainSymbol }}" 
-          style="margin: 5px; padding: 8px; width: 150px;"
-        />
-        <br>
-        <button 
-          (click)="sendTransaction(to, amount)" 
-          [disabled]="!isAuthenticated || !to || !amount"
-          style="background: #28a745; color: white; padding: 10px 15px; margin-top: 10px;"
-        >
-          {{ !isAuthenticated ? '🔒 Autentícate primero' : '🚀 Enviar' }}
-        </button>
-      </div>
+<div class="auth-section">
+  <div *ngIf="isAuthenticated">
+    <p>Autenticado como: {{ firebaseUser?.email || 'Usuario anónimo' }} <span *ngIf="isAdmin">👑 Admin</span></p>
+    <p>UID: {{ firebaseUser?.uid }}</p>
+    <button (click)="logout()">🚪 Cerrar sesión</button>
+    <div *ngIf="isAdmin">
+      <p>Funciones de administrador:</p>
+      <button (click)="resetAdminTo()">🔧 Resetear Dirección Admin</button>
     </div>
   </div>
-
-  <!-- Sección de Solana -->
-  <div *ngIf="currentBlockchain() === 'solana'">
-    <!-- Wallet info Solana -->
-    <div *ngIf="solanaConnected; else connectSolanaTemplate">
-      <h3>Solana Wallet Conectada</h3>
-      <p>Wallet: {{ solanaWalletName }}</p>
-      <p>Cuenta: {{ solanaAccount }}</p>
-      <p>Saldo: {{ solanaBalance }} SOL</p>
-
-      <!-- Enviar transacción Solana -->
-      <div>
-        <h4>Enviar SOL</h4>
-        <input 
-          [(ngModel)]="to" 
-          placeholder="Dirección destino (Solana address)" 
-          style="margin: 5px; padding: 8px; width: 300px;"
-        />
-        <br>
-        <input 
-          [(ngModel)]="amount" 
-          placeholder="Cantidad SOL" 
-          style="margin: 5px; padding: 8px; width: 150px;"
-        />
-        <br>
-        <button 
-          (click)="sendTransaction(to, amount)" 
-          [disabled]="!solanaConnected || !to || !amount"
-          style="background: #9945FF; color: white; padding: 10px 15px; margin-top: 10px;"
-        >
-          🚀 Enviar SOL
-        </button>
-      </div>
-    </div>
-
-    <!-- Template específico para conectar Solana -->
-    <ng-template #connectSolanaTemplate>
-      <div>
-        <p>Selecciona "Conectar Wallet Solana" arriba para comenzar</p>
-        <div *ngIf="solanaWallets.length > 0">
-          <p>Wallets detectadas: {{ solanaWallets.length }}</p>
-        </div>
-        <div *ngIf="solanaWallets.length === 0">
-          <p>No se detectaron wallets Solana. Instala Phantom o Solflare.</p>
-        </div>
-      </div>
-    </ng-template>
+  <div *ngIf="!isAuthenticated">
+    <p>No autenticado - Elige cómo quieres continuar:</p>
+    <button (click)="authWallet.signInWithGoogle()">🚀 Iniciar con Google</button>
+    <button (click)="loginAnonymous()">🔒 Pagar anónimamente</button>
+    <p>* Google te permite guardar tu historial de transacciones</p>
   </div>
+</div>
 
-  <!-- Template cuando no hay wallet Ethereum conectada -->
-  <ng-template #connectWalletTemplate>
+<div class="transactions-ethereum">
+  <h3>Transacciones Ethereum</h3>
+  <table *ngIf="ethTransactions().length > 0">
+    <tr>
+      <th>Click para ver estado actual de la transaccion</th>
+      <th>De</th>
+      <th>A</th>
+      <th>Monto</th>
+      <th>Moneda</th>
+      <th>Fecha</th>
+      <th>Estado</th>
+    </tr>
+    <tr *ngFor="let tx of ethTransactions()">
+      <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
+      <td>{{ tx.from | slice:0:10 }}...</td>
+      <td>{{ tx.to | slice:0:10 }}...</td>
+      <td>{{ tx.amount }}</td>
+      <td>{{ tx.currency }}</td>
+      <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+      <td>{{ tx.status }}</td>
+    </tr>
+  </table>
+  <p *ngIf="ethTransactions().length === 0">No hay transacciones Ethereum.</p>
+</div>
+
+<div class="transactions-solana">
+  <h3>Transacciones Solana</h3>
+  <table *ngIf="solanaTransactions().length > 0">
+    <tr>
+      <th>Tx Hash</th>
+      <th>De</th>
+      <th>A</th>
+      <th>Monto</th>
+      <th>Moneda</th>
+      <th>Fecha</th>
+      <th>Estado</th>
+    </tr>
+    <tr *ngFor="let tx of solanaTransactions()">
+      <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
+      <td>{{ tx.from | slice:0:10 }}...</td>
+      <td>{{ tx.to | slice:0:10 }}...</td>
+      <td>{{ tx.amount }}</td>
+      <td>{{ tx.currency }}</td>
+      <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+      <td>{{ tx.status }}</td>
+    </tr>
+  </table>
+  <p *ngIf="solanaTransactions().length === 0">No hay transacciones Solana.</p>
+</div>
+
+<div class="wallet-ethereum" *ngIf="account && currentBlockchain() === 'ethereum'">
+  <h3>Ethereum Wallet</h3>
+  <p>Cuenta: {{ account }}</p>
+  <p>Red: {{ chainSymbol }} (ID: {{ chainId }})</p>
+  <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
+  <div>
+    <h4>Cambiar Red</h4>
+    <select (change)="switchChain($any($event.target).value)">
+      <option *ngFor="let chain of availableChains" [value]="chain.id">{{ chain.name }}</option>
+    </select>
+  </div>
+  <div>
+    <h4>Enviar</h4>
+    <div *ngIf="!isHardcoded()">
+      <p>No hay dirección administrativa configurada.</p>
+    </div>
+    <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
+    <input type="number" [(ngModel)]="amount" placeholder="0.0001" step="0.0001" min="0.0001">
+    <button [disabled]="!isAuthenticated || !isHardcoded() || !amount || parseFloat(amount) <= 0" (click)="sendTransaction(to, amount)">
+      {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
+    </button>
+  </div>
+</div>
+
+<div class="wallet-solana" *ngIf="currentBlockchain() === 'solana'">
+  <div *ngIf="solanaConnected">
+    <h3>Solana Wallet Conectada</h3>
+    <p>Wallet: {{ solanaWalletName }}</p>
+    <p>Cuenta: {{ solanaAccount }}</p>
+    <p>Saldo: {{ solanaBalance }} SOL</p>
     <div>
-      <p>No hay wallet Ethereum conectada.</p>
-      <button (click)="connectWallet()" style="background: #f0ad4e; color: white; padding: 10px 15px;">
-        🔗 Conectar MetaMask
+      <h4>Enviar SOL</h4>
+      <div *ngIf="!isHardcoded()">
+        <p>No hay dirección administrativa configurada.</p>
+      </div>
+      <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
+      <input type="number" [(ngModel)]="amount" placeholder="0.0001" step="0.0001" min="0.0001">
+      <button [disabled]="!solanaConnected || !isHardcoded() || !amount || parseFloat(amount) <= 0" (click)="sendTransaction(to, amount)">
+        {{ !solanaConnected ? '🔒 Conecta wallet primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar SOL' }}
       </button>
     </div>
-  </ng-template>
+  </div>
+  <div *ngIf="!solanaConnected">
+    <p>Selecciona "Conectar Wallet Solana" arriba para comenzar</p>
+    <p>Wallets detectadas: {{ solanaWallets.length }}</p>
+    <p *ngIf="solanaWallets.length === 0">No se detectaron wallets Solana. Instala Phantom o Solflare.</p>
+  </div>
+</div>
+
+<div class="no-wallet" *ngIf="!account && currentBlockchain() === 'ethereum'">
+  <p>No hay wallet Ethereum conectada.</p>
+  <button (click)="connectWallet()">🔗 Conectar MetaMask</button>
 </div>

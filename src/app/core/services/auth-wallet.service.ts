@@ -1,9 +1,7 @@
-import { Injectable, signal, effect, inject } from '@angular/core';
+import { Injectable, signal, effect } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ethers, BrowserProvider, isAddress, parseEther, formatEther } from 'ethers';
-
-// ✅ Importaciones CORRECTAS de Firebase
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -15,7 +13,6 @@ import {
   User 
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-
 import { environment } from '../../../environments/environment';
 import { FirestoreService } from '../../core-prueba/services-prueba/firestore.service';
 import { getChainById } from '../helpers/chains.helper';
@@ -23,12 +20,10 @@ import { Transaction } from '../../types/types';
 
 @Injectable({ providedIn: 'root' })
 export class AuthWalletService {
-  // ✅ Inicialización CORRECTA
   private firebaseApp = initializeApp(environment.firebase);
   private auth = getAuth(this.firebaseApp);
   private firestore = getFirestore(this.firebaseApp);
 
-  // Signals existentes
   token = signal<string | null>(null);
   account = signal<string | null>(null);
   chainId = signal<number | null>(null);
@@ -38,15 +33,12 @@ export class AuthWalletService {
   isAuthenticated = signal<boolean>(false);
   firebaseUser = signal<User | null>(null);
   providerStatus = signal<string>('No inicializado');
-
-  // Nuevas signals para autenticación social
   isAdmin = signal<boolean>(false);
   errorMessage = signal<string | null>(null);
 
   private provider: BrowserProvider | null = null;
   private signer: ethers.Signer | null = null;
   private backendUrl = 'http://localhost:3000';
-
   private readonly AUTH_TOKEN_KEY = 'firebase_custom_token';
   private readonly ANON_UUID_KEY = 'anonymous_uuid';
 
@@ -54,7 +46,6 @@ export class AuthWalletService {
     private http: HttpClient,
     private firestoreService: FirestoreService
   ) {
-    // Effects existentes
     effect(() => {
       const currentToken = this.token();
       if (currentToken) {
@@ -72,12 +63,10 @@ export class AuthWalletService {
       }
     });
 
-    // Inicializaciones
     this.initAuthListener();
     this.initializeAppAuth();
   }
 
-  // MÉTODOS EXISTENTES DE WALLET
   debugService() {
     console.log('=== DEBUG AuthWalletService ===');
     console.log('Provider:', this.provider);
@@ -92,30 +81,29 @@ export class AuthWalletService {
     console.log('================================');
   }
 
-private initAuthListener() {
-  onAuthStateChanged(this.auth, async (user) => {
-    console.log('Auth state changed:', user);
-    this.firebaseUser.set(user);
-    this.isAuthenticated.set(!!user);
+  private initAuthListener() {
+    onAuthStateChanged(this.auth, async (user) => {
+      console.log('Auth state changed:', user);
+      this.firebaseUser.set(user);
+      this.isAuthenticated.set(!!user);
 
-    if (user) {
-      const idTokenResult = await user.getIdTokenResult();
-      const claims = idTokenResult.claims;
-      
-      // ✅ CORRECCIÓN: Acceso por corchetes para la propiedad 'admin'
-      this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
-      
-      user.getIdToken().then(token => {
-        console.log('Firebase ID Token disponible');
-      }).catch(err => {
-        console.error('Error getting ID token:', err);
-      });
-    } else {
-      this.token.set(null);
-      this.isAdmin.set(false);
-    }
-  });
-}
+      if (user) {
+        const idTokenResult = await user.getIdTokenResult();
+        const claims = idTokenResult.claims;
+        this.isAdmin.set(user.uid === 'tuUID' || claims['admin'] === true);
+        
+        user.getIdToken().then(token => {
+          console.log('Firebase ID Token disponible');
+        }).catch(err => {
+          console.error('Error getting ID token:', err);
+        });
+      } else {
+        this.token.set(null);
+        this.isAdmin.set(false);
+      }
+    });
+  }
+
   private async initializeAppAuth() {
     const savedToken = localStorage.getItem(this.AUTH_TOKEN_KEY);
     const savedUuid = localStorage.getItem(this.ANON_UUID_KEY);
@@ -254,15 +242,27 @@ private initAuthListener() {
       this.balance.set('0');
       return;
     }
-    const b = await this.provider.getBalance(this.account()!);
-    this.balance.set(formatEther(b));
+    try {
+      const b = await this.provider.getBalance(this.account()!);
+      this.balance.set(formatEther(b));
+    } catch (error: any) {
+      console.warn('Advertencia: No se pudo obtener balance Ethereum:', error.message);
+      this.balance.set('0');
+      this.providerStatus.set('Error al obtener balance, intenta de nuevo');
+    }
   }
 
   async sendTransaction(to: string, value: string) {
     if (!this.signer) throw new Error('No signer disponible');
     if (!isAddress(to)) throw new Error('Dirección inválida');
-    const amount = parseEther(value);
-
+    
+    const valueStr = String(value).trim();
+    if (!valueStr || isNaN(parseFloat(valueStr)) || parseFloat(valueStr) <= 0) {
+      throw new Error('Monto inválido');
+    }
+    
+    const amount = parseEther(valueStr);
+    
     const balanceWei = await this.provider!.getBalance(this.account()!);
     if (balanceWei < amount) throw new Error('Saldo insuficiente');
 
@@ -271,7 +271,7 @@ private initAuthListener() {
     const registro: Omit<Transaction, 'id'> = {
       from: this.account()!,
       to: to,
-      amount: value,
+      amount: valueStr,
       currency: this.chainSymbol(),
       txHash: tx.hash,
       timestamp: new Date(),
@@ -280,7 +280,6 @@ private initAuthListener() {
 
     await this.firestoreService.addRegistro(registro);
     console.log('Transacción guardada en Firestore');
-
     return tx;
   }
 
@@ -336,33 +335,30 @@ private initAuthListener() {
     }
   }
 
-  // NUEVOS MÉTODOS DE AUTENTICACIÓN SOCIAL
   async signInWithGoogle() {
-  try {
-    // ✅ Cerrar sesión existente primero si está autenticado
-    if (this.isAuthenticated()) {
-      console.log('🔒 Cerrando sesión previa...');
-      await this.logout();
+    try {
+      if (this.isAuthenticated()) {
+        console.log('🔒 Cerrando sesión previa...');
+        await this.logout();
+      }
+
+      this.errorMessage.set(null);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(this.auth, provider);
+      const user = result.user;
+      
+      const idTokenResult = await user.getIdTokenResult();
+      const claims = idTokenResult.claims;
+      
+      this.isAdmin.set(claims['admin'] === true);
+      console.log('✅ Usuario autenticado con Google:', user);
+      
+    } catch (error: any) {
+      console.error('❌ Error en login con Google:', error);
+      this.errorMessage.set(error.message);
     }
-
-    this.errorMessage.set(null);
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(this.auth, provider);
-    const user = result.user;
-    
-    const idTokenResult = await user.getIdTokenResult();
-    const claims = idTokenResult.claims;
-    
-    this.isAdmin.set(claims['admin'] === true);
-    console.log('✅ Usuario autenticado con Google:', user);
-    
-  } catch (error: any) {
-    console.error('❌ Error en login con Google:', error);
-    this.errorMessage.set(error.message);
   }
-}
 
-  // Método alternativo para login anónimo (complementario)
   async loginAnonymousAlt(uuid: string) {
     try {
       this.errorMessage.set(null);
