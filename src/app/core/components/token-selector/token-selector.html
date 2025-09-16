@@ -1,0 +1,52 @@
+<div class="token-selector">
+  <div class="token-selector-header">
+    <h3>Seleccionar Token</h3>
+    <button (click)="refreshBalances()" [disabled]="isLoading" class="refresh-button">
+      {{ isLoading ? 'Cargando...' : '🔄' }}
+    </button>
+  </div>
+
+  <div class="search-container">
+    <input
+      type="text"
+      placeholder="Buscar token..."
+      [value]="searchTerm"
+      (input)="onSearchChange($event)"
+      class="search-input"
+    />
+    <button (click)="clearSearch()" class="clear-search" *ngIf="searchTerm">
+      ✕
+    </button>
+  </div>
+
+  <div class="tokens-list" *ngIf="!isLoading && filteredTokens.length > 0">
+    <div
+      *ngFor="let tokenBalance of filteredTokens; trackBy: trackByTokenAddress"
+      (click)="selectToken(tokenBalance.token)"
+      [class.selected]="selectedToken?.address === tokenBalance.token.address"
+      class="token-item"
+    >
+      <div class="token-info">
+        <div class="token-symbol">{{ tokenBalance.token.symbol }}</div>
+        <div class="token-name">{{ tokenBalance.token.name }}</div>
+      </div>
+      <div class="token-balance">
+        {{ tokenBalance.formattedBalance | slice:0:8 }}
+      </div>
+    </div>
+  </div>
+
+  <div class="loading-state" *ngIf="isLoading">
+    <div class="loading-spinner"></div>
+    <p>Cargando tokens...</p>
+  </div>
+
+  <div class="empty-state" *ngIf="!isLoading && filteredTokens.length === 0">
+    <p *ngIf="searchTerm">No se encontraron tokens que coincidan con "{{ searchTerm }}"</p>
+    <p *ngIf="!searchTerm">No hay tokens disponibles</p>
+  </div>
+
+  <div class="selected-token" *ngIf="selectedToken">
+    <strong>Token seleccionado:</strong> {{ selectedToken.symbol }} - {{ selectedToken.name }}
+  </div>
+</div>
