@@ -20,7 +20,7 @@ export class PagoWallets implements OnInit, OnDestroy {
   chainId: number | null = null;
   chainSymbol: string = 'ETH';
   balance: string = '0';
-  amount: string | number = '0';
+  amount: string = '0'; // ✅ Mantenido como string
   to: string = '';
   solanaAccount: string | null = null;
   solanaBalance: string = '0';
@@ -234,12 +234,14 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
   }
 
-  async sendTransaction(to: string, amount: string | number) {
+  async sendTransaction(to: string, amount: string) {
     try {
-      const amountStr = String(amount).trim();
-      if (!amountStr || parseFloat(amountStr) <= 0) {
-        alert('Monto inválido: debe ser mayor a 0');
-        return;
+      // ✅ Asegurar que amount sea string y tenga formato válido
+      const amountString = typeof amount === 'string' ? amount : String(amount);
+      
+      // ✅ Validar formato del amount antes de enviar
+      if (!/^\d+(\.\d+)?$/.test(amountString)) {
+        throw new Error('Formato de monto inválido. Use números con punto decimal (ej: 0.0008)');
       }
       
       const destination = this.isHardcoded() && this.adminTo() ? this.adminTo()! : to;
@@ -249,13 +251,13 @@ export class PagoWallets implements OnInit, OnDestroy {
           alert('Debes estar autenticado para enviar transacciones Ethereum');
           return;
         }
-        await this.authWallet.sendTransaction(destination, amountStr);
+        await this.authWallet.sendTransaction(destination, amountString);
       } else {
         if (!this.solanaConnected) {
           alert('Debes conectar tu wallet Solana primero');
           return;
         }
-        await this.solanaWallet.sendTransaction(destination, amountStr);
+        await this.solanaWallet.sendTransaction(destination, amountString);
       }
       this.to = '';
       this.amount = '0';
@@ -267,15 +269,11 @@ export class PagoWallets implements OnInit, OnDestroy {
   }
 
   debugService() {
-    console.log('=== DEBUG PagoWallets ===');
-    console.log('Blockchain actual:', this.currentBlockchain());
-    console.log('Amount type:', typeof this.amount);
     if (this.currentBlockchain() === 'ethereum') {
       this.authWallet.debugService();
     } else {
       this.solanaWallet.debugService();
     }
-    console.log('================================');
   }
 
   private generateUUID(): string {
