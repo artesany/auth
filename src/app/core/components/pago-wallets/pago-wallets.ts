@@ -13,7 +13,8 @@ import { Token } from '../../models/token.model';
   selector: 'app-pago-wallets',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './pago-wallets.html'
+  templateUrl: './pago-wallets.html',
+  styleUrls: ['./pago-wallets.scss']
 })
 export class PagoWallets implements OnInit, OnDestroy {
   token: string | null = null;
