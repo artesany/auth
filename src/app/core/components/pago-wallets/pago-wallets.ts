@@ -20,7 +20,6 @@ export class PagoWallets implements OnInit, OnDestroy {
   token: string | null = null;
   account: string | null = null;
   chainId: number | null = null;
-  chainName = signal<string>('');
   chainSymbol: string = 'ETH';
   balance: string = '0';
   amount: string = '0';
@@ -43,10 +42,11 @@ export class PagoWallets implements OnInit, OnDestroy {
   adminTo = signal<string | null>(null);
   isHardcoded = signal<boolean>(false);
   
-  // ✅ NUEVAS PROPIEDADES PARA TOKENS
+  // ✅ PROPIEDADES PARA TOKENS
   currentToken = signal<Token | null>(null);
   availableTokens = signal<Token[]>([]);
   tokenBalances = signal<Map<string, string>>(new Map());
+  chainName = signal<string>('Seleccione una red');
 
   private walletListener: Unsubscribe | null = null;
   private adminWalletCache = new Map<string, { address: string | null, enabled: boolean }>();
@@ -65,7 +65,6 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.solanaWallets = this.solanaWallet.availableWallets();
       this.showSolanaSelector = this.solanaWallet.showWalletSelector();
       
-      // CORRECCIÓN: Condicionar la sincronización solo si el blockchain actual es Solana
       if (this.currentBlockchain() === 'solana') {
         this.availableTokens.set(this.solanaWallet.availableTokens());
         this.currentToken.set(this.solanaWallet.currentToken());
@@ -82,24 +81,20 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.firebaseUser = this.authWallet.firebaseUser();
       this.providerStatus = this.authWallet.providerStatus();
       this.isAdmin.set(this.authWallet.isAdmin());
-
-       // ✅ NUEVO: Actualizar el nombre de la cadena
-  if (this.chainId) {
-    const chainInfo = getChainById(this.chainId);
-    this.chainName.set(chainInfo?.name || 'Unknown Network');
-  } else {
-    this.chainName.set('Not Connected');
-  }
-
       
-      // CORRECCIÓN: Condicionar la sincronización solo si el blockchain actual es Ethereum
+      // ✅ ACTUALIZAR chainName SIEMPRE que chainId esté disponible
+      if (this.authWallet.chainId() !== null) {
+        const chainInfo = getChainById(this.authWallet.chainId()!);
+        this.chainName.set(chainInfo?.name || 'Unknown Network');
+      } else {
+        this.chainName.set('Not Connected');
+      }
+      
       if (this.currentBlockchain() === 'ethereum') {
         this.availableTokens.set(this.authWallet.availableTokens());
         this.currentToken.set(this.authWallet.currentToken());
         this.tokenBalances.set(this.authWallet.tokenBalances());
       }
-
-      
       
       this.loadWalletAddress(this.currentBlockchain());
     });
@@ -110,8 +105,7 @@ export class PagoWallets implements OnInit, OnDestroy {
     this.solanaWallet.initProvider();
     this.loadTransactions();
     await this.loadWalletAddress(this.currentBlockchain());
-    // CORRECCIÓN: Pausar refrescos del servicio inactivo al inicio
-    this.solanaWallet.pauseRefreshes(); // Inicia en Ethereum, pausar Solana
+    this.solanaWallet.pauseRefreshes();
   }
 
   ngOnDestroy() {
@@ -173,18 +167,14 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
     if (blockchain === 'solana') {
       this.connectSolanaWallet();
-      // CORRECCIÓN: Pausar Ethereum y resumir Solana
       this.authWallet.pauseRefreshes();
       this.solanaWallet.resumeRefreshes();
-      // Resetear signals a Solana
       this.availableTokens.set(this.solanaWallet.availableTokens());
       this.currentToken.set(this.solanaWallet.currentToken());
       this.tokenBalances.set(this.solanaWallet.tokenBalances());
     } else {
-      // CORRECCIÓN: Pausar Solana y resumir Ethereum
       this.solanaWallet.pauseRefreshes();
       this.authWallet.resumeRefreshes();
-      // Resetear signals a Ethereum
       this.availableTokens.set(this.authWallet.availableTokens());
       this.currentToken.set(this.authWallet.currentToken());
       this.tokenBalances.set(this.authWallet.tokenBalances());
@@ -315,19 +305,24 @@ export class PagoWallets implements OnInit, OnDestroy {
   }
 
   async switchChain(chainId: string) {
+    const selectedChainId = Number(chainId);
+    
+    if (selectedChainId === 0) {
+      // ✅ Opción "Elija red" seleccionada - no hacer nada
+      return;
+    }
+
     if (this.currentBlockchain() === 'ethereum') {
-      const success = await this.authWallet.switchChain(Number(chainId));
+      const success = await this.authWallet.switchChain(selectedChainId);
       if (!success) {
         alert(`No se pudo cambiar a la red ${chainId}`);
       }
     }
   }
 
-  // ✅ NUEVO MÉTODO: Cambiar token seleccionado
   onTokenChange(token: Token) {
     this.currentToken.set(token);
     
-    // Sincronizar con el servicio correspondiente
     if (this.currentBlockchain() === 'ethereum') {
       this.authWallet.currentToken.set(token);
     } else {
@@ -335,7 +330,6 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
   }
 
-  // ✅ NUEVO MÉTODO: Obtener balance del token actual (string, como estaba)
   getCurrentTokenBalance(): string {
     const currentToken = this.currentToken();
     if (!currentToken) return '0';
@@ -343,7 +337,6 @@ export class PagoWallets implements OnInit, OnDestroy {
     return this.tokenBalances().get(currentToken.address) || '0';
   }
 
-  // ✅ NUEVO MÉTODO: helper numérico para comparaciones (añadido)
   getCurrentTokenBalanceNumber(): number {
     const val = this.getCurrentTokenBalance();
     const n = parseFloat(val ?? '0');
@@ -395,15 +388,12 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
   }
 
-  // ✅ Nuevo: validar input numérico (solo dígitos y un punto decimal)
   validateNumericInput(event: KeyboardEvent) {
     const key = event.key;
     if (!key) return;
 
-    // permitir control keys (backspace, tab, arrows, etc.)
     if (key.length > 1) return;
 
-    // permitir un solo punto decimal
     if (key === '.') {
       const input = event.target as HTMLInputElement | null;
       const current = input ? input.value : '';
@@ -413,16 +403,16 @@ export class PagoWallets implements OnInit, OnDestroy {
       return;
     }
 
-    // permitir solo dígitos
     const allowed = /[0-9]/;
     if (!allowed.test(key)) {
       event.preventDefault();
     }
   }
+
   getNetworkClassFromName(name: string | null): string {
-  if (!name) return 'network-default';
-  return 'network-' + name.toLowerCase().replace(/\s+/g, '-');
-}
+    if (!name) return 'network-default';
+    return 'network-' + name.toLowerCase().replace(/\s+/g, '-');
+  }
 
   private generateUUID(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {

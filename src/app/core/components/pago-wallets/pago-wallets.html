@@ -59,12 +59,16 @@
 <div *ngIf="account && currentBlockchain() === 'ethereum'" class="wallet-ethereum">
   <h3>Ethereum Wallet</h3>
   <p>Cuenta: {{ account }}</p>
- <p>
-  <span class="red-actual" [ngClass]="getNetworkClassFromName(chainName())">RED ACTUAL:</span> 
-  <span class="network-badge" [ngClass]="getNetworkClassFromName(chainName())">
-    {{ chainName() }} (ID: {{ chainId }} - {{ chainSymbol }})
-  </span>
-</p>
+  
+  <!-- ✅ MANTIENE LOS COLORES Y FORMATO ORIGINAL -->
+  <p>
+    <span class="red-actual" [ngClass]="getNetworkClassFromName(chainName())">RED ACTUAL:</span> 
+    <span class="network-badge" [ngClass]="getNetworkClassFromName(chainName())">
+      {{ chainName() }} (ID: {{ chainId }} - {{ chainSymbol }})
+    </span>
+  </p>
+  
+  <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
 
   <div *ngIf="currentToken()">
     <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
@@ -72,8 +76,12 @@
 
   <div class="chain-switch">
     <h4>Cambiar Red</h4>
-    <select (change)="switchChain($any($event.target).value)">
-      <option *ngFor="let chain of availableChains" [value]="chain.id">{{ chain.name }}</option>
+    <!-- ✅ DROPDOWN CON OPCIÓN "ELIJA RED" -->
+    <select (change)="switchChain($any($event.target).value)" [ngModel]="chainId">
+      <option value="0">🔻 Elija red</option>
+      <option *ngFor="let chain of availableChains" [value]="chain.id">
+        {{ chain.name }}
+      </option>
     </select>
   </div>
 
