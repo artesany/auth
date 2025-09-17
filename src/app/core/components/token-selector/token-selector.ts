@@ -1,8 +1,8 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Token, TokenBalance } from '../../helpers/abi.helper';
-import { TokenService } from '../../tokens/services/token-service';
+import { Token, TokenBalance } from '../../models/token.model';
+import { TokenService } from '../../../core/tokens/services/token-service';
 import { TokenRegistryService } from '../../tokens/services/token-registry';
 import { Subscription } from 'rxjs';
 import { ethers } from 'ethers';
@@ -47,7 +47,6 @@ export class TokenSelector implements OnInit, OnDestroy {
 
   async loadTokens() {
     if (!this.account || (this.blockchain === 'ethereum' && !this.provider) || (this.blockchain === 'solana' && !this.connection)) {
-      // Cargar lista de tokens sin balances si faltan parámetros
       this.tokens = this.tokenRegistry.getTokens(this.chainIdOrNetwork).map(token => ({
         token,
         balance: '0',
@@ -65,14 +64,12 @@ export class TokenSelector implements OnInit, OnDestroy {
         this.chainIdOrNetwork
       );
       
-      // Seleccionar token nativo por defecto
       const nativeToken = this.tokens.find(t => t.token.isNative);
       if (nativeToken) {
         this.selectToken(nativeToken.token);
       }
     } catch (error) {
       console.error('Error loading tokens:', error);
-      // Cargar solo la lista de tokens sin balances
       this.tokens = this.tokenRegistry.getTokens(this.chainIdOrNetwork).map(token => ({
         token,
         balance: '0',

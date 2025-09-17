@@ -1,12 +1,10 @@
 import { Injectable } from '@angular/core';
-import { Token, TOKEN_LISTS, SOLANA_TOKEN_LISTS, SOLANA_COMMON_TOKENS, SOLANA_NETWORKS, detectAddressType, SolanaHelpers, EthereumHelpers } from '../../helpers/abi.helper';
+import { Token, SOLANA_COMMON_TOKENS, SOLANA_NETWORKS, detectAddressType, SolanaHelpers, EthereumHelpers } from '../../helpers/abi.helper';
+import { TOKEN_LISTS, SOLANA_TOKEN_LISTS } from '../../helpers/token-list.helper';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { ethers, Contract } from 'ethers';
-
-// ✅ SOLUCIÓN CORRECTA - Importar desde el entry point principal
 import * as splToken from '@solana/spl-token';
 
-// Interfaz específica para metadatos de token ERC-20, sin extender ethers.Contract
 interface IERC20Metadata {
   name(): Promise<string>;
   symbol(): Promise<string>;
@@ -19,7 +17,6 @@ export class TokenRegistryService {
 
   constructor() {}
 
-  // Obtener tokens por chainId (EVM) o network (Solana)
   getTokens(chainIdOrNetwork: number | string): Token[] {
     let tokens: Token[] = [];
     
@@ -29,7 +26,6 @@ export class TokenRegistryService {
       tokens = [...(SOLANA_TOKEN_LISTS[chainIdOrNetwork] || [])];
     }
     
-    // Agregar tokens personalizados si existen
     const customKey = typeof chainIdOrNetwork === 'number' 
       ? `evm-${chainIdOrNetwork}` 
       : `solana-${chainIdOrNetwork}`;
@@ -38,24 +34,31 @@ export class TokenRegistryService {
       tokens = [...tokens, ...this.customTokens[customKey]];
     }
     
-    return tokens;
+    return tokens.length >= 5 ? tokens : [...tokens, ...this.getFallbackTokens(chainIdOrNetwork)];
   }
 
-  // Obtener token por dirección
+  private getFallbackTokens(chainIdOrNetwork: number | string): Token[] {
+    const fallbackTokens: Token[] = [];
+    if (typeof chainIdOrNetwork === 'number') {
+      const nativeToken = TOKEN_LISTS[chainIdOrNetwork]?.find(t => t.isNative);
+      if (nativeToken) fallbackTokens.push(nativeToken);
+    } else {
+      const nativeToken = SOLANA_TOKEN_LISTS[chainIdOrNetwork]?.find(t => t.isNative);
+      if (nativeToken) fallbackTokens.push(nativeToken);
+    }
+    return fallbackTokens;
+  }
+
   getTokenByAddress(chainIdOrNetwork: number | string, address: string): Token | undefined {
-    const tokens = this.getTokens(chainIdOrNetwork);
-    return tokens.find(token => 
+    return this.getTokens(chainIdOrNetwork).find(token => 
       token.address.toLowerCase() === address.toLowerCase()
     );
   }
 
-  // Obtener token nativo
   getNativeToken(chainIdOrNetwork: number | string): Token | undefined {
-    const tokens = this.getTokens(chainIdOrNetwork);
-    return tokens.find(token => token.isNative);
+    return this.getTokens(chainIdOrNetwork).find(token => token.isNative);
   }
 
-  // Agregar token personalizado
   addCustomToken(chainIdOrNetwork: number | string, token: Token): void {
     const customKey = typeof chainIdOrNetwork === 'number' 
       ? `evm-${chainIdOrNetwork}` 
@@ -65,7 +68,6 @@ export class TokenRegistryService {
       this.customTokens[customKey] = [];
     }
     
-    // Verificar si el token ya existe
     const exists = this.customTokens[customKey].some(t => 
       t.address.toLowerCase() === token.address.toLowerCase()
     );
@@ -75,26 +77,22 @@ export class TokenRegistryService {
     }
   }
 
-  // Obtener metadata de token desde blockchain (EVM)
   async fetchTokenMetadataEVM(
     provider: ethers.BrowserProvider,
     address: string,
     chainId: number
   ): Promise<Token | null> {
     try {
-      // Si es la dirección nativa, devolver el token nativo
       if (address === '0xNative' || address === 'native') {
         return this.getNativeToken(chainId) || null;
       }
 
-      // Crear contrato con tipos explícitos
       const contract = new Contract(address, [
         'function name() view returns (string)',
         'function symbol() view returns (string)',
         'function decimals() view returns (uint8)'
       ], provider) as unknown as IERC20Metadata;
 
-      // Llamar a los métodos del contrato
       const [name, symbol, decimals] = await Promise.all([
         contract.name(),
         contract.symbol(),
@@ -115,43 +113,27 @@ export class TokenRegistryService {
     }
   }
 
-  // Obtener metadata de token desde blockchain (Solana)
   async fetchTokenMetadataSolana(
     connection: Connection,
     address: string
   ): Promise<Token | null> {
     try {
-      // Si es la dirección nativa, devolver SOL
-      if (address === 'native' || address === SOLANA_COMMON_TOKENS.WSOL.address) {
+      if (address === SOLANA_COMMON_TOKENS.WSOL.address) {
         const mainnetToken = this.getNativeToken('mainnet-beta');
         return mainnetToken ? { ...mainnetToken, chainId: SOLANA_NETWORKS['mainnet-beta'].chainId } : null;
       }
 
       const publicKey = new PublicKey(address);
-      
-      // ✅ SOLUCIÓN: Usar la API correcta según la versión
-      let decimals = 6; // Valor por defecto
-      
+      let decimals = 6;
+
       try {
-        // Intentar con versión moderna (0.3.x+)
-        const mintInfo = await (splToken as any).getMint(connection, publicKey);
+        const mintInfo = await splToken.getMint(connection, publicKey);
         decimals = mintInfo.decimals;
       } catch (error) {
-        console.warn('Error with getMint, trying alternative approach...');
-        
-        // Fallback para versiones antiguas
-        try {
-          // Para versiones < 0.3.0, usar Token class
-          const token = new (splToken as any).Token(connection, publicKey, splToken.TOKEN_PROGRAM_ID, null);
-          const mintInfo = await token.getMintInfo();
-          decimals = mintInfo.decimals;
-        } catch (fallbackError) {
-          console.warn('Fallback also failed, using default decimals:', fallbackError);
-          // Último fallback: obtener info de la cuenta directamente
-          const accountInfo = await connection.getAccountInfo(publicKey);
-          if (accountInfo && accountInfo.data.length > 44) {
-            decimals = accountInfo.data[44];
-          }
+        console.warn('Error with getMint, using default decimals:', error);
+        const accountInfo = await connection.getAccountInfo(publicKey);
+        if (accountInfo && accountInfo.data.length > 44) {
+          decimals = accountInfo.data[44];
         }
       }
       
@@ -159,7 +141,7 @@ export class TokenRegistryService {
         address,
         name: 'Unknown SPL Token',
         symbol: 'UNKNOWN',
-        decimals: decimals,
+        decimals,
         chainId: SOLANA_NETWORKS['mainnet-beta'].chainId,
         logoURI: undefined
       };
@@ -169,7 +151,6 @@ export class TokenRegistryService {
     }
   }
 
-  // Buscar token por dirección (auto-detecta la blockchain)
   async findTokenByAddress(
     address: string,
     evmProvider?: ethers.BrowserProvider,
@@ -182,29 +163,21 @@ export class TokenRegistryService {
       if (!evmProvider || chainId === undefined) {
         throw new Error('EVM provider and chainId are required for Ethereum address');
       }
-      // Buscar en registros existentes primero
       const existingToken = this.getTokenByAddress(chainId, address);
       if (existingToken) return existingToken;
-      
-      // Si no existe, buscar en blockchain
       return await this.fetchTokenMetadataEVM(evmProvider, address, chainId);
-    } 
-    else if (addressType === 'solana') {
+    } else if (addressType === 'solana') {
       if (!solanaConnection) {
         throw new Error('Solana connection is required for Solana address');
       }
-      // Buscar en registros existentes primero
       const existingToken = this.getTokenByAddress('mainnet-beta', address);
       if (existingToken) return existingToken;
-      
-      // Si no existe, buscar en blockchain
       return await this.fetchTokenMetadataSolana(solanaConnection, address);
     }
     
     return null;
   }
 
-  // Validar formato de dirección de token
   isValidTokenAddress(address: string, blockchainType: 'ethereum' | 'solana'): boolean {
     if (blockchainType === 'ethereum') {
       return EthereumHelpers.isValidAddress(address);
@@ -213,22 +186,18 @@ export class TokenRegistryService {
     }
   }
 
-  // Obtener todos los tokens personalizados
   getCustomTokens(): { [key: string]: Token[] } {
     return { ...this.customTokens };
   }
 
-  // Limpiar tokens personalizados
   clearCustomTokens(): void {
     this.customTokens = {};
   }
 
-  // Limpiar tokens personalizados de una blockchain específica
   clearCustomTokensForChain(chainIdOrNetwork: number | string): void {
     const customKey = typeof chainIdOrNetwork === 'number' 
       ? `evm-${chainIdOrNetwork}` 
       : `solana-${chainIdOrNetwork}`;
-    
     delete this.customTokens[customKey];
   }
 }
