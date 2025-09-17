@@ -20,6 +20,7 @@ export class PagoWallets implements OnInit, OnDestroy {
   token: string | null = null;
   account: string | null = null;
   chainId: number | null = null;
+  chainName = signal<string>('');
   chainSymbol: string = 'ETH';
   balance: string = '0';
   amount: string = '0';
@@ -81,6 +82,15 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.firebaseUser = this.authWallet.firebaseUser();
       this.providerStatus = this.authWallet.providerStatus();
       this.isAdmin.set(this.authWallet.isAdmin());
+
+       // ✅ NUEVO: Actualizar el nombre de la cadena
+  if (this.chainId) {
+    const chainInfo = getChainById(this.chainId);
+    this.chainName.set(chainInfo?.name || 'Unknown Network');
+  } else {
+    this.chainName.set('Not Connected');
+  }
+
       
       // CORRECCIÓN: Condicionar la sincronización solo si el blockchain actual es Ethereum
       if (this.currentBlockchain() === 'ethereum') {
@@ -88,6 +98,8 @@ export class PagoWallets implements OnInit, OnDestroy {
         this.currentToken.set(this.authWallet.currentToken());
         this.tokenBalances.set(this.authWallet.tokenBalances());
       }
+
+      
       
       this.loadWalletAddress(this.currentBlockchain());
     });
@@ -407,6 +419,10 @@ export class PagoWallets implements OnInit, OnDestroy {
       event.preventDefault();
     }
   }
+  getNetworkClassFromName(name: string | null): string {
+  if (!name) return 'network-default';
+  return 'network-' + name.toLowerCase().replace(/\s+/g, '-');
+}
 
   private generateUUID(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {

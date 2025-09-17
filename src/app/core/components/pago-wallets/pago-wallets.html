@@ -59,8 +59,12 @@
 <div *ngIf="account && currentBlockchain() === 'ethereum'" class="wallet-ethereum">
   <h3>Ethereum Wallet</h3>
   <p>Cuenta: {{ account }}</p>
-  <p><span class="red-actual">RED ACTUAL:</span> {{ chainSymbol }} (ID: {{ chainId }})</p>
-  <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
+ <p>
+  <span class="red-actual" [ngClass]="getNetworkClassFromName(chainName())">RED ACTUAL:</span> 
+  <span class="network-badge" [ngClass]="getNetworkClassFromName(chainName())">
+    {{ chainName() }} (ID: {{ chainId }} - {{ chainSymbol }})
+  </span>
+</p>
 
   <div *ngIf="currentToken()">
     <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
