@@ -322,12 +322,19 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
   }
 
-  // ✅ NUEVO MÉTODO: Obtener balance del token actual
+  // ✅ NUEVO MÉTODO: Obtener balance del token actual (string, como estaba)
   getCurrentTokenBalance(): string {
     const currentToken = this.currentToken();
     if (!currentToken) return '0';
     
     return this.tokenBalances().get(currentToken.address) || '0';
+  }
+
+  // ✅ NUEVO MÉTODO: helper numérico para comparaciones (añadido)
+  getCurrentTokenBalanceNumber(): number {
+    const val = this.getCurrentTokenBalance();
+    const n = parseFloat(val ?? '0');
+    return isNaN(n) ? 0 : n;
   }
 
   async sendTransaction(to: string, amount: string) {
@@ -372,6 +379,31 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.authWallet.debugService();
     } else {
       this.solanaWallet.debugService();
+    }
+  }
+
+  // ✅ Nuevo: validar input numérico (solo dígitos y un punto decimal)
+  validateNumericInput(event: KeyboardEvent) {
+    const key = event.key;
+    if (!key) return;
+
+    // permitir control keys (backspace, tab, arrows, etc.)
+    if (key.length > 1) return;
+
+    // permitir un solo punto decimal
+    if (key === '.') {
+      const input = event.target as HTMLInputElement | null;
+      const current = input ? input.value : '';
+      if (current.includes('.')) {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    // permitir solo dígitos
+    const allowed = /[0-9]/;
+    if (!allowed.test(key)) {
+      event.preventDefault();
     }
   }
 

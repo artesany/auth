@@ -125,8 +125,10 @@
       <p>No hay dirección administrativa configurada.</p>
     </div>
     <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001">
-    <button [disabled]="!isAuthenticated || !isHardcoded()" (click)="sendTransaction(to, amount)">
+    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001"
+           (keypress)="validateNumericInput($event)">
+    <button [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
+            (click)="sendTransaction(to, amount)">
       {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
     </button>
   </div>
@@ -150,8 +152,10 @@
         <p>No hay dirección administrativa configurada.</p>
       </div>
       <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-      <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001">
-      <button [disabled]="!solanaConnected || !isHardcoded()" (click)="sendTransaction(to, amount)">
+      <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)" step="0.0001"
+             (keypress)="validateNumericInput($event)">
+      <button [disabled]="!solanaConnected || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
+              (click)="sendTransaction(to, amount)">
         {{ !solanaConnected ? '🔒 Conecta wallet primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
       </button>
     </div>
