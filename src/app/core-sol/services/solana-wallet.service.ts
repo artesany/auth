@@ -37,6 +37,9 @@ export class SolanaWalletService implements OnDestroy {
   private accountCheckInterval: any = null;
   private listeners: { [event in WalletEvent]?: WalletEventListener } = {};
 
+  // CORRECCIÓN: Variable para controlar refrescos
+  private isActive = false; // Por defecto inactivo, se activará cuando sea seleccionado
+
   // ✅ NUEVAS DEPENDENCIAS
   private tokenService = inject(TokenService);
   private tokenRegistry = inject(TokenRegistryService);
@@ -50,7 +53,7 @@ export class SolanaWalletService implements OnDestroy {
     effect(() => {
       const currentAccount = this.account();
       console.log('🔵 [Solana] Account changed:', currentAccount);
-      if (currentAccount) {
+      if (currentAccount && this.isActive) {
         this.startBalanceMonitoring();
         this.startAccountMonitoring();
         this.loadAvailableTokens(); // ✅ Cargar tokens cuando hay cuenta
@@ -85,7 +88,7 @@ export class SolanaWalletService implements OnDestroy {
 
   // ✅ NUEVO MÉTODO: Actualizar balances de tokens
   async refreshTokenBalances() {
-    if (!this.account() || !this.connection) return;
+    if (!this.account() || !this.connection || !this.isActive) return;
 
     try {
       const balances = await this.tokenService.getTokenBalancesSolana(
@@ -338,7 +341,7 @@ export class SolanaWalletService implements OnDestroy {
   }
 
   private handleAccountChanged(newPublicKey: PublicKey | null) {
-    if (newPublicKey) {
+    if (newPublicKey && this.isActive) {
       this.privateKey = newPublicKey;
       this.account.set(newPublicKey.toString());
       this.refreshBalance();
@@ -354,7 +357,7 @@ export class SolanaWalletService implements OnDestroy {
     this.stopAccountMonitoring();
     
     this.accountCheckInterval = setInterval(async () => {
-      if (this.walletAdapter?.publicKey) {
+      if (this.walletAdapter?.publicKey && this.isActive) {
         const currentKey = this.walletAdapter.publicKey.toString();
         const storedKey = this.account();
         
@@ -400,8 +403,10 @@ export class SolanaWalletService implements OnDestroy {
     this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
     
     this.balanceRefreshInterval = setInterval(() => {
-      this.refreshBalance();
-      this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
+      if (this.isActive) {
+        this.refreshBalance();
+        this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
+      }
     }, 30000);
     
     console.log('📊 [Solana] Balance monitoring started');
@@ -416,7 +421,7 @@ export class SolanaWalletService implements OnDestroy {
   }
 
   async refreshBalance() {
-    if (!this.privateKey) {
+    if (!this.privateKey || !this.isActive) {
       this.balance.set('0');
       return;
     }
@@ -571,5 +576,28 @@ export class SolanaWalletService implements OnDestroy {
 
   isProperlyConnected(): boolean {
     return this.isConnected() && this.privateKey !== null && this.walletAdapter !== null;
+  }
+
+  // CORRECCIÓN: Nuevos métodos para pausar y resumir refrescos
+  pauseRefreshes() {
+    this.isActive = false;
+    this.stopBalanceMonitoring();
+    this.stopAccountMonitoring();
+    this.removeAllListeners();
+    console.log('Solana refrescos pausados');
+  }
+
+  resumeRefreshes() {
+    this.isActive = true;
+    if (this.walletAdapter) {
+      this.setupWalletListeners();
+    }
+    if (this.account()) {
+      this.startBalanceMonitoring();
+      this.startAccountMonitoring();
+      this.refreshBalance();
+      this.refreshTokenBalances();
+    }
+    console.log('Solana refrescos resumidos');
   }
 }

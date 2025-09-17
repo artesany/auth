@@ -63,10 +63,12 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.solanaWallets = this.solanaWallet.availableWallets();
       this.showSolanaSelector = this.solanaWallet.showWalletSelector();
       
-      // ✅ NUEVO: Sincronizar tokens de Solana
-      this.availableTokens.set(this.solanaWallet.availableTokens());
-      this.currentToken.set(this.solanaWallet.currentToken());
-      this.tokenBalances.set(this.solanaWallet.tokenBalances());
+      // CORRECCIÓN: Condicionar la sincronización solo si el blockchain actual es Solana
+      if (this.currentBlockchain() === 'solana') {
+        this.availableTokens.set(this.solanaWallet.availableTokens());
+        this.currentToken.set(this.solanaWallet.currentToken());
+        this.tokenBalances.set(this.solanaWallet.tokenBalances());
+      }
     });
 
     effect(() => {
@@ -79,10 +81,12 @@ export class PagoWallets implements OnInit, OnDestroy {
       this.providerStatus = this.authWallet.providerStatus();
       this.isAdmin.set(this.authWallet.isAdmin());
       
-      // ✅ NUEVO: Sincronizar tokens de Ethereum
-      this.availableTokens.set(this.authWallet.availableTokens());
-      this.currentToken.set(this.authWallet.currentToken());
-      this.tokenBalances.set(this.authWallet.tokenBalances());
+      // CORRECCIÓN: Condicionar la sincronización solo si el blockchain actual es Ethereum
+      if (this.currentBlockchain() === 'ethereum') {
+        this.availableTokens.set(this.authWallet.availableTokens());
+        this.currentToken.set(this.authWallet.currentToken());
+        this.tokenBalances.set(this.authWallet.tokenBalances());
+      }
       
       this.loadWalletAddress(this.currentBlockchain());
     });
@@ -93,6 +97,8 @@ export class PagoWallets implements OnInit, OnDestroy {
     this.solanaWallet.initProvider();
     this.loadTransactions();
     await this.loadWalletAddress(this.currentBlockchain());
+    // CORRECCIÓN: Pausar refrescos del servicio inactivo al inicio
+    this.solanaWallet.pauseRefreshes(); // Inicia en Ethereum, pausar Solana
   }
 
   ngOnDestroy() {
@@ -154,6 +160,21 @@ export class PagoWallets implements OnInit, OnDestroy {
     }
     if (blockchain === 'solana') {
       this.connectSolanaWallet();
+      // CORRECCIÓN: Pausar Ethereum y resumir Solana
+      this.authWallet.pauseRefreshes();
+      this.solanaWallet.resumeRefreshes();
+      // Resetear signals a Solana
+      this.availableTokens.set(this.solanaWallet.availableTokens());
+      this.currentToken.set(this.solanaWallet.currentToken());
+      this.tokenBalances.set(this.solanaWallet.tokenBalances());
+    } else {
+      // CORRECCIÓN: Pausar Solana y resumir Ethereum
+      this.solanaWallet.pauseRefreshes();
+      this.authWallet.resumeRefreshes();
+      // Resetear signals a Ethereum
+      this.availableTokens.set(this.authWallet.availableTokens());
+      this.currentToken.set(this.authWallet.currentToken());
+      this.tokenBalances.set(this.authWallet.tokenBalances());
     }
     this.loadTransactions();
   }

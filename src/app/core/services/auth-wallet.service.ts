@@ -59,6 +59,10 @@ export class AuthWalletService implements OnDestroy {
   private readonly ANON_UUID_KEY = 'anonymous_uuid';
   private authStateUnsubscribe: (() => void) | null = null;
 
+  // CORRECCIÓN: Variables para controlar refrescos
+  private isActive = true; // Por defecto activo, pero se pausará si no es el blockchain actual
+  private ethereumListeners: { [event: string]: (...args: any[]) => void } = {};
+
   // ✅ NUEVAS DEPENDENCIAS
   // private tokenService = inject(TokenService);
   // private tokenRegistry = inject(TokenRegistryService);
@@ -80,7 +84,8 @@ export class AuthWalletService implements OnDestroy {
     });
 
     effect(async () => {
-      if (this.account() && this.provider) {
+      // CORRECCIÓN: Solo refrescar si el servicio está activo
+      if (this.account() && this.provider && this.isActive) {
         await this.refreshBalance();
         await this.refreshTokenBalances(); // ✅ NUEVO: Actualizar balances de tokens
       } else {
@@ -92,7 +97,7 @@ export class AuthWalletService implements OnDestroy {
     // ✅ NUEVO EFFECT para cargar tokens cuando cambia la chain
     effect(() => {
       const chainId = this.chainId();
-      if (chainId) {
+      if (chainId && this.isActive) {
         this.loadAvailableTokens();
       }
     });
@@ -106,6 +111,7 @@ export class AuthWalletService implements OnDestroy {
     if (this.authStateUnsubscribe) {
       this.authStateUnsubscribe();
     }
+    this.removeEthereumListeners(); // CORRECCIÓN: Limpiar listeners
   }
 
   // ✅ NUEVO MÉTODO: Cargar tokens disponibles
@@ -124,7 +130,7 @@ export class AuthWalletService implements OnDestroy {
 
   // ✅ NUEVO MÉTODO: Actualizar balances de tokens
   async refreshTokenBalances() {
-    if (!this.account() || !this.provider || !this.chainId()) return;
+    if (!this.account() || !this.provider || !this.chainId() || !this.isActive) return;
 
     try {
       const balances = await this.tokenService.getTokenBalancesEVM(
@@ -320,35 +326,55 @@ export class AuthWalletService implements OnDestroy {
     }
   }
 
-  async initProvider() {
+  initProvider() {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       this.provider = new ethers.BrowserProvider((window as any).ethereum);
       this.providerStatus.set('Proveedor detectado');
 
       const ethereum = (window as any).ethereum;
-      ethereum.on('accountsChanged', async (accounts: string[]) => {
-        this.account.set(accounts[0] || null);
-        if (accounts[0]) this.signer = await this.provider!.getSigner();
-      });
+      // CORRECCIÓN: Guardar listeners para poder removerlos
+      this.ethereumListeners['accountsChanged'] = async (accounts: string[]) => {
+        if (this.isActive) {
+          this.account.set(accounts[0] || null);
+          if (accounts[0]) this.signer = await this.provider!.getSigner();
+        }
+      };
+      ethereum.on('accountsChanged', this.ethereumListeners['accountsChanged']);
 
-      ethereum.on('chainChanged', async (chainIdHex: string) => {
-        const id = Number(BigInt(chainIdHex));
-        this.chainId.set(id);
-        const chainInfo = getChainById(id);
-        this.chainSymbol.set(chainInfo?.symbol || 'ETH');
-        if (this.provider) this.signer = await this.provider.getSigner();
-        await this.refreshBalance();
-        await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
-      });
+      this.ethereumListeners['chainChanged'] = async (chainIdHex: string) => {
+        if (this.isActive) {
+          const id = Number(BigInt(chainIdHex));
+          this.chainId.set(id);
+          const chainInfo = getChainById(id);
+          this.chainSymbol.set(chainInfo?.symbol || 'ETH');
+          if (this.provider) this.signer = await this.provider.getSigner();
+          await this.refreshBalance();
+          await this.refreshTokenBalances(); // ✅ Actualizar balances de tokens
+        }
+      };
+      ethereum.on('chainChanged', this.ethereumListeners['chainChanged']);
 
-      ethereum.on('disconnect', () => {
-        this.account.set(null);
-        this.signer = null;
-        this.balance.set('0');
-        this.tokenBalances.set(new Map());
-      });
+      this.ethereumListeners['disconnect'] = () => {
+        if (this.isActive) {
+          this.account.set(null);
+          this.signer = null;
+          this.balance.set('0');
+          this.tokenBalances.set(new Map());
+        }
+      };
+      ethereum.on('disconnect', this.ethereumListeners['disconnect']);
     } else {
       this.providerStatus.set('No se detectó MetaMask');
+    }
+  }
+
+  private removeEthereumListeners() {
+    const ethereum = (window as any).ethereum;
+    if (ethereum) {
+      Object.entries(this.ethereumListeners).forEach(([event, listener]) => {
+        ethereum.off(event, listener);
+      });
+      this.ethereumListeners = {};
     }
   }
 
@@ -394,7 +420,7 @@ export class AuthWalletService implements OnDestroy {
   }
 
   async refreshBalance() {
-    if (!this.account() || !this.provider) {
+    if (!this.account() || !this.provider || !this.isActive) {
       this.balance.set('0');
       return;
     }
@@ -403,7 +429,7 @@ export class AuthWalletService implements OnDestroy {
   }
 
   async switchChain(targetChainId: number): Promise<boolean> {
-    if (!this.provider) return false;
+    if (!this.provider || !this.isActive) return false;
     const ethereum = (window as any).ethereum;
     const chainHex = '0x' + targetChainId.toString(16);
 
@@ -454,6 +480,23 @@ export class AuthWalletService implements OnDestroy {
         return false;
       }
     }
+  }
+
+  // CORRECCIÓN: Nuevos métodos para pausar y resumir refrescos
+  pauseRefreshes() {
+    this.isActive = false;
+    this.removeEthereumListeners();
+    console.log('Ethereum refrescos pausados');
+  }
+
+  resumeRefreshes() {
+    this.isActive = true;
+    this.initProvider(); // Re-inicializar listeners
+    if (this.account()) {
+      this.refreshBalance();
+      this.refreshTokenBalances();
+    }
+    console.log('Ethereum refrescos resumidos');
   }
 
   // NUEVOS MÉTODOS DE AUTENTICACIÓN SOCIAL
