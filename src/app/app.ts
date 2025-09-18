@@ -1,11 +1,10 @@
 import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import{ Navbar } from '../app/core/components/navbar/navbar'
 
-import { PagoWallets } from './core/components/pago-wallets/pago-wallets';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, PagoWallets],
+  imports: [Navbar],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })

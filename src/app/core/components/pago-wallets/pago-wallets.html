@@ -1,205 +1,415 @@
 <!-- 🔝 SECCIÓN 1: Autenticación y selección de blockchain/wallet -->
-<div class="auth-section">
-  <div *ngIf="isAuthenticated">
-    <p>Autenticado como: {{ firebaseUser?.email || 'Usuario anónimo' }} 
-      <span *ngIf="isAdmin">👑 Admin</span>
+<mat-card class="auth-section">
+  <mat-card-content>
+    <div *ngIf="isAuthenticated">
+      <p>Autenticado como: {{ firebaseUser?.email || 'Usuario anónimo' }} 
+        <span *ngIf="isAdmin" class="admin-badge">👑 Admin</span>
+      </p>
+      <p>UID: {{ firebaseUser?.uid }}</p>
+      <button mat-raised-button color="warn" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        Cerrar sesión
+      </button>
+      <div *ngIf="isAdmin">
+        <p>Funciones de administrador:</p>
+        <button mat-stroked-button color="primary" (click)="resetAdminTo()">
+          <mat-icon>build</mat-icon>
+          Resetear Dirección Admin
+        </button>
+      </div>
+    </div>
+    <div *ngIf="!isAuthenticated">
+      <p>No autenticado - Elige cómo quieres continuar:</p>
+      <div class="auth-buttons">
+        <button mat-raised-button color="primary" (click)="authWallet.signInWithGoogle()">
+          <mat-icon>login</mat-icon>
+          Iniciar con Google
+        </button>
+        <button mat-stroked-button (click)="loginAnonymous()">
+          <mat-icon>lock</mat-icon>
+          Pagar anónimamente
+        </button>
+      </div>
+      <p class="auth-note">* Google te permite guardar tu historial de transacciones</p>
+    </div>
+  </mat-card-content>
+</mat-card>
+
+<mat-card class="blockchain-selector">
+  <mat-card-header>
+    <mat-card-title>Seleccionar Blockchain</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="button-group">
+      <button mat-raised-button [color]="currentBlockchain() === 'ethereum' ? 'primary' : 'basic'" 
+              (click)="selectBlockchain('ethereum')">
+        <mat-icon>currency_bitcoin</mat-icon>
+        Ethereum
+      </button>
+      <button mat-raised-button [color]="currentBlockchain() === 'solana' ? 'primary' : 'basic'" 
+              (click)="selectBlockchain('solana')">
+        <mat-icon>account_balance_wallet</mat-icon>
+        Conectar Wallet Solana
+      </button>
+    </div>
+    <p class="current-mode">Modo actual: {{ currentBlockchain() === 'ethereum' ? 'Ethereum' : 'Solana' }}</p>
+  </mat-card-content>
+</mat-card>
+
+<mat-card *ngIf="showSolanaSelector" class="wallet-selector">
+  <mat-card-header>
+    <mat-card-title>Seleccionar Wallet Solana</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <p>Elige cómo quieres conectarte:</p>
+    <div class="wallet-options">
+      <button mat-button *ngFor="let wallet of solanaWallets" 
+              (click)="selectSolanaWallet(wallet.name)" class="wallet-button">
+        <mat-icon>{{ wallet.icon }}</mat-icon>
+        {{ wallet.name }}
+      </button>
+    </div>
+    <button mat-stroked-button (click)="cancelWalletSelection()">Cancelar</button>
+  </mat-card-content>
+</mat-card>
+
+<mat-card class="status-card">
+  <mat-card-content>
+    <div class="status-content">
+      <mat-icon class="status-icon">info</mat-icon>
+      <span class="status-text">Estado: {{ currentBlockchain() === 'ethereum' ? providerStatus : solanaProviderStatus }}</span>
+    </div>
+    <button mat-button (click)="debugService()">Debug</button>
+  </mat-card-content>
+</mat-card>
+
+<mat-card *ngIf="!account && currentBlockchain() === 'ethereum'" class="no-wallet-card">
+  <mat-card-content class="no-wallet-content">
+    <mat-icon class="wallet-icon">account_balance_wallet</mat-icon>
+    <p class="no-wallets">No hay wallet Ethereum conectada.</p>
+    <button mat-raised-button color="primary" (click)="connectWallet()">
+      <mat-icon>link</mat-icon>
+      Conectar MetaMask
+    </button>
+  </mat-card-content>
+</mat-card>
+
+<mat-card *ngIf="!solanaConnected && currentBlockchain() === 'solana'" class="no-wallet-card">
+  <mat-card-content class="no-wallet-content">
+    <mat-icon class="wallet-icon">account_balance_wallet</mat-icon>
+    <p>Selecciona "Conectar Wallet Solana" arriba para comenzar</p>
+    <p class="wallet-count">Wallets detectadas: {{ solanaWallets.length }}</p>
+    <p *ngIf="solanaWallets.length === 0" class="no-wallets">
+      No se detectaron wallets Solana. Instala Phantom o Solflare.
     </p>
-    <p>UID: {{ firebaseUser?.uid }}</p>
-    <button (click)="logout()">🚪 Cerrar sesión</button>
-    <div *ngIf="isAdmin">
-      <p>Funciones de administrador:</p>
-      <button (click)="resetAdminTo()">🔧 Resetear Dirección Admin</button>
-    </div>
-  </div>
-  <div *ngIf="!isAuthenticated">
-    <p>No autenticado - Elige cómo quieres continuar:</p>
-    <button (click)="authWallet.signInWithGoogle()">🚀 Iniciar con Google</button>
-    <button (click)="loginAnonymous()">🔒 Pagar anónimamente</button>
-    <p>* Google te permite guardar tu historial de transacciones</p>
-  </div>
-</div>
+  </mat-card-content>
+</mat-card>
 
-<div class="blockchain-selector">
-  <h3>Seleccionar Blockchain</h3>
-  <button (click)="selectBlockchain('ethereum')">Ethereum</button>
-  <button (click)="selectBlockchain('solana')">Conectar Wallet Solana</button>
-  <p>Modo actual: {{ currentBlockchain() === 'ethereum' ? 'Ethereum' : 'Solana' }}</p>
-</div>
-
-<div *ngIf="showSolanaSelector" class="wallet-selector">
-  <h3>Seleccionar Wallet Solana</h3>
-  <p>Elige cómo quieres conectarte:</p>
-  <div class="wallet-options">
-    <button *ngFor="let wallet of solanaWallets" (click)="selectSolanaWallet(wallet.name)">
-      {{ wallet.icon }} {{ wallet.name }}
-    </button>
-  </div>
-  <button (click)="cancelWalletSelection()">Cancelar</button>
-</div>
-
-<div class="status">
-  <p>Estado: {{ currentBlockchain() === 'ethereum' ? providerStatus : solanaProviderStatus }}</p>
-  <button (click)="debugService()">Debug</button>
-</div>
-
-<div class="no-wallet" *ngIf="!account && currentBlockchain() === 'ethereum'">
-  <p>No hay wallet Ethereum conectada.</p>
-  <button (click)="connectWallet()">🔗 Conectar MetaMask</button>
-</div>
-
-<div *ngIf="!solanaConnected && currentBlockchain() === 'solana'">
-  <p>Selecciona "Conectar Wallet Solana" arriba para comenzar</p>
-  <p>Wallets detectadas: {{ solanaWallets.length }}</p>
-  <p *ngIf="solanaWallets.length === 0">
-    No se detectaron wallets Solana. Instala Phantom o Solflare.
-  </p>
-</div>
-
-<!-- 🔹 SECCIÓN 2: Información de wallet + Token + Chains + Envíos -->
-<div *ngIf="account && currentBlockchain() === 'ethereum'" class="wallet-ethereum">
-  <h3>Ethereum Wallet</h3>
-  <p>Cuenta: {{ account }}</p>
-  
-  <!-- ✅ MANTIENE LOS COLORES Y FORMATO ORIGINAL -->
-  <p>
-    <span class="red-actual" [ngClass]="getNetworkClassFromName(chainName())">RED ACTUAL:</span> 
-    <span class="network-badge" [ngClass]="getNetworkClassFromName(chainName())">
-      {{ chainName() }} (ID: {{ chainId }} - {{ chainSymbol }})
-    </span>
-  </p>
-  
-  <p>Saldo: {{ balance }} {{ chainSymbol }}</p>
-
-  <div *ngIf="currentToken()">
-    <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
-  </div>
-
-  <div class="chain-switch">
-    <h4>Cambiar Red</h4>
-    <!-- ✅ DROPDOWN CON OPCIÓN "ELIJA RED" -->
-    <select (change)="switchChain($any($event.target).value)" [ngModel]="chainId">
-      <option value="0">🔻 Elija red</option>
-      <option *ngFor="let chain of availableChains" [value]="chain.id">
-        {{ chain.name }}
-      </option>
-    </select>
-  </div>
-
-  <!-- Token Selector -->
-  <div class="token-selector" *ngIf="availableTokens().length > 0">
-    <h4>Seleccionar Token</h4>
-    <select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)" class="token-dropdown">
-      <option *ngFor="let token of availableTokens()" [ngValue]="token">
-        {{ token.symbol }} - {{ token.name }}
-        <span *ngIf="tokenBalances().get(token.address)">
-          ({{ tokenBalances().get(token.address) }})
+<!-- 🔹 SECCIÓN 2: Información de wallet + Token + Chains + Envíos para Ethereum -->
+<mat-card *ngIf="account && currentBlockchain() === 'ethereum'" class="wallet-card">
+  <mat-card-header>
+    <mat-card-title>Ethereum Wallet</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="wallet-info">
+      <div class="info-item">
+        <mat-icon>account_circle</mat-icon>
+        <span>Cuenta: <strong>{{ account }}</strong></span>
+      </div>
+      <p class="network-display">
+        <span class="red-actual" [ngClass]="getNetworkClassFromName(chainName())">RED ACTUAL:</span> 
+        <span class="network-badge" [ngClass]="getNetworkClassFromName(chainName())">
+          {{ chainName() }} (ID: {{ chainId }} - {{ chainSymbol }})
         </span>
-      </option>
-    </select>
-  </div>
-
-  <!-- Envíos -->
-  <div>
-    <h4>Enviar</h4>
-    <div *ngIf="!isHardcoded()">
-      <p>No hay dirección administrativa configurada.</p>
+      </p>
+      <div class="info-item">
+        <mat-icon>account_balance</mat-icon>
+        <span>Saldo: <strong>{{ balance }} {{ chainSymbol }}</strong></span>
+      </div>
+      <div class="info-item" *ngIf="currentToken()">
+        <mat-icon>token</mat-icon>
+        <span>Token: <strong>{{ currentToken()?.symbol }}</strong> - Saldo: <strong>{{ getCurrentTokenBalance() }}</strong></span>
+      </div>
     </div>
-    <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)"
-           (keypress)="validateNumericInput($event)">
-    <button [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
-            (click)="sendTransaction(to, amount)">
-      {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
-    </button>
-  </div>
-</div>
 
-<div *ngIf="solanaConnected && currentBlockchain() === 'solana'" class="wallet-solana">
-  <h3>Solana Wallet Conectada</h3>
-  <p>Wallet: {{ solanaWalletName }}</p>
-  <p>Cuenta: {{ solanaAccount }}</p>
-  <p>Saldo: {{ solanaBalance }} SOL</p>
+    <mat-divider></mat-divider>
 
-  <div *ngIf="currentToken()">
-    <p>Token: {{ currentToken()?.symbol }} - Saldo: {{ getCurrentTokenBalance() }}</p>
-  </div>
+    <div class="chain-switch">
+      <h4>
+        <mat-icon>swap_horiz</mat-icon>
+        Cambiar Red
+      </h4>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Seleccionar red</mat-label>
+        <mat-select (selectionChange)="switchChain($event.value)" [value]="chainId">
+          <mat-option value="0">🔻 Elija red</mat-option>
+          <mat-option *ngFor="let chain of availableChains" [value]="chain.id">
+            {{ chain.name }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
 
-  <!-- Token Selector -->
-  <div class="token-selector" *ngIf="availableTokens().length > 0">
-    <h4>Seleccionar Token</h4>
-    <select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)" class="token-dropdown">
-      <option *ngFor="let token of availableTokens()" [ngValue]="token">
-        {{ token.symbol }} - {{ token.name }}
-        <span *ngIf="tokenBalances().get(token.address)">
-          ({{ tokenBalances().get(token.address) }})
+    <!-- Token Selector -->
+    <div class="token-selector" *ngIf="availableTokens().length > 0">
+      <h4>
+        <mat-icon>token</mat-icon>
+        Seleccionar Token
+      </h4>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Seleccionar token</mat-label>
+        <mat-select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)">
+          <mat-option *ngFor="let token of availableTokens()" [value]="token">
+            {{ token.symbol }} - {{ token.name }}
+            <span *ngIf="tokenBalances().get(token.address)">
+              ({{ tokenBalances().get(token.address) }})
+            </span>
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <!-- Envíos -->
+    <div class="send-section">
+     
+      <div *ngIf="!isHardcoded()" class="admin-warning">
+        <mat-icon>warning</mat-icon>
+        <p>No hay dirección administrativa configurada.</p>
+      </div>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Dirección de destino</mat-label>
+        <input matInput [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()">
+      </mat-form-field>
+      
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Monto</mat-label>
+        <input matInput type="text" [(ngModel)]="amount" placeholder="0.0008"
+               (keypress)="validateNumericInput($event)">
+      </mat-form-field>
+      
+      <button mat-raised-button color="primary" class="send-button full-width"
+              [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
+              (click)="sendTransaction(to, amount)">
+        <mat-icon>send</mat-icon>
+        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
+      </button>
+    </div>
+  </mat-card-content>
+</mat-card>
+
+<!-- 🔹 SECCIÓN 2: Información de wallet + Token + Envíos para Solana (NUEVA) -->
+<mat-card *ngIf="solanaConnected && currentBlockchain() === 'solana'" class="wallet-card">
+  <mat-card-header>
+    <mat-card-title>Solana Wallet</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="wallet-info">
+      <div class="info-item">
+        <mat-icon>account_circle</mat-icon>
+        <span>Cuenta: <strong>{{ solanaAccount }}</strong></span>
+      </div>
+      <p class="network-display">
+        <span class="red-actual" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">RED ACTUAL:</span> 
+        <span class="network-badge" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">
+          Solana Network (ID: {{ chainId || 'N/A' }} - {{ chainSymbol || 'SOL' }})
         </span>
-      </option>
-    </select>
-  </div>
-
-  <!-- Envíos -->
-  <div>
-    <h4>Enviar</h4>
-    <div *ngIf="!isHardcoded()">
-      <p>No hay dirección administrativa configurada.</p>
+      </p>
+      <div class="info-item">
+        <mat-icon>account_balance</mat-icon>
+        <span>Saldo: <strong>{{ solanaBalance }} SOL</strong></span>
+      </div>
+      <div class="info-item" *ngIf="currentToken()">
+        <mat-icon>token</mat-icon>
+        <span>Token: <strong>{{ currentToken()?.symbol }}</strong> - Saldo: <strong>{{ getCurrentTokenBalance() }}</strong></span>
+      </div>
     </div>
-    <input type="text" [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()" placeholder="Dirección de destino">
-    <input type="text" [(ngModel)]="amount" placeholder="Monto (ej: 0.0008)"
-           (keypress)="validateNumericInput($event)">
-    <button [disabled]="!solanaConnected || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
-            (click)="sendTransaction(to, amount)">
-      {{ !solanaConnected ? '🔒 Conecta wallet primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
-    </button>
-  </div>
-</div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Selector de Token para Solana (sin selector de red, ya que Solana no lo necesita de la misma manera) -->
+    <div class="token-selector" *ngIf="availableTokens().length > 0">
+      <h4>
+        <mat-icon>token</mat-icon>
+        Seleccionar Token
+      </h4>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Seleccionar token</mat-label>
+        <mat-select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)">
+          <mat-option *ngFor="let token of availableTokens()" [value]="token">
+            {{ token.symbol }} - {{ token.name }}
+            <span *ngIf="tokenBalances().get(token.address)">
+              ({{ tokenBalances().get(token.address) }})
+            </span>
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <!-- Envíos para Solana -->
+    <div class="send-section">
+     
+      <div *ngIf="!isHardcoded()" class="admin-warning">
+        <mat-icon>warning</mat-icon>
+        <p>No hay dirección administrativa configurada.</p>
+      </div>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Dirección de destino</mat-label>
+        <input matInput [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()">
+      </mat-form-field>
+      
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Monto</mat-label>
+        <input matInput type="text" [(ngModel)]="amount" placeholder="0.0008"
+               (keypress)="validateNumericInput($event)">
+      </mat-form-field>
+      
+      <button mat-raised-button color="primary" class="send-button full-width"
+              [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
+              (click)="sendTransaction(to, amount)">
+        <mat-icon>send</mat-icon>
+        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
+      </button>
+    </div>
+  </mat-card-content>
+</mat-card>
 
 <!-- 🔻 SECCIÓN 3: Transacciones al final -->
-<div class="transactions-ethereum">
+<div class="transactions-card" *ngIf="currentBlockchain() === 'ethereum'">
   <h3>Transacciones Ethereum</h3>
-  <table *ngIf="ethTransactions().length > 0">
-    <tr>
-      <th>Tx Hash</th>
-      <th>De</th>
-      <th>A</th>
-      <th>Monto</th>
-      <th>Moneda</th>
-      <th>Fecha</th>
-      <th>Estado</th>
-    </tr>
-    <tr *ngFor="let tx of ethTransactions()">
-      <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
-      <td>{{ tx.from | slice:0:10 }}...</td>
-      <td>{{ tx.to | slice:0:10 }}...</td>
-      <td>{{ tx.amount }}</td>
-      <td>{{ tx.currency }}</td>
-      <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
-      <td>{{ tx.status }}</td>
-    </tr>
-  </table>
-  <p *ngIf="ethTransactions().length === 0">No hay transacciones Ethereum.</p>
+  
+  <div class="transactions-container">
+    <table mat-table [dataSource]="ethTransactions()" class="transactions-table">
+      <!-- Columna Tx Hash -->
+      <ng-container matColumnDef="txHash">
+        <th mat-header-cell *matHeaderCellDef>Tx Hash</th>
+        <td mat-cell *matCellDef="let tx">
+          <a [href]="getExplorerUrl(tx)" target="_blank" class="tx-link">
+            <mat-icon>open_in_new</mat-icon>
+            {{ tx.txHash | slice:0:10 }}...
+          </a>
+        </td>
+      </ng-container>
+
+      <!-- Columna From -->
+      <ng-container matColumnDef="from">
+        <th mat-header-cell *matHeaderCellDef>De</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.from | slice:0:10 }}...</td>
+      </ng-container>
+
+      <!-- Columna To -->
+      <ng-container matColumnDef="to">
+        <th mat-header-cell *matHeaderCellDef>A</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.to | slice:0:10 }}...</td>
+      </ng-container>
+
+      <!-- Columna Amount -->
+      <ng-container matColumnDef="amount">
+        <th mat-header-cell *matHeaderCellDef>Monto</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.amount }}</td>
+      </ng-container>
+
+      <!-- Columna Currency -->
+      <ng-container matColumnDef="currency">
+        <th mat-header-cell *matHeaderCellDef>Moneda</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.currency }}</td>
+      </ng-container>
+
+      <!-- Columna Date -->
+      <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let tx">{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+      </ng-container>
+
+      <!-- Columna Status -->
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let tx" [ngClass]="{
+          'status-completed': tx.status === 'completed',
+          'status-pending': tx.status === 'pending',
+          'status-failed': tx.status === 'failed'
+        }">
+          {{ tx.status }}
+        </td>
+      </ng-container>
+
+      <!-- Filas -->
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+  </div>
+
+  <p *ngIf="ethTransactions().length === 0" class="no-transactions">
+    <mat-icon>info</mat-icon>
+    No hay transacciones Ethereum.
+  </p>
 </div>
 
-<div class="transactions-solana">
+<div class="transactions-card" *ngIf="currentBlockchain() === 'solana'">
   <h3>Transacciones Solana</h3>
-  <table *ngIf="solanaTransactions().length > 0">
-    <tr>
-      <th>Tx Hash</th>
-      <th>De</th>
-      <th>A</th>
-      <th>Monto</th>
-      <th>Moneda</th>
-      <th>Fecha</th>
-      <th>Estado</th>
-    </tr>
-    <tr *ngFor="let tx of solanaTransactions()">
-      <td><a [href]="getExplorerUrl(tx)" target="_blank">{{ tx.txHash | slice:0:10 }}...</a></td>
-      <td>{{ tx.from | slice:0:10 }}...</td>
-      <td>{{ tx.to | slice:0:10 }}...</td>
-      <td>{{ tx.amount }}</td>
-      <td>{{ tx.currency }}</td>
-      <td>{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
-      <td>{{ tx.status }}</td>
-    </tr>
-  </table>
-  <p *ngIf="solanaTransactions().length === 0">No hay transacciones Solana.</p>
+  
+  <div class="transactions-container">
+    <table mat-table [dataSource]="solanaTransactions()" class="transactions-table">
+      <!-- Columna Tx Hash -->
+      <ng-container matColumnDef="txHash">
+        <th mat-header-cell *matHeaderCellDef>Tx Hash</th>
+        <td mat-cell *matCellDef="let tx">
+          <a [href]="getExplorerUrl(tx)" target="_blank" class="tx-link">
+            <mat-icon>open_in_new</mat-icon>
+            {{ tx.txHash | slice:0:10 }}...
+          </a>
+        </td>
+      </ng-container>
+
+      <!-- Columna From -->
+      <ng-container matColumnDef="from">
+        <th mat-header-cell *matHeaderCellDef>De</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.from | slice:0:10 }}...</td>
+      </ng-container>
+
+      <!-- Columna To -->
+      <ng-container matColumnDef="to">
+        <th mat-header-cell *matHeaderCellDef>A</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.to | slice:0:10 }}...</td>
+      </ng-container>
+
+      <!-- Columna Amount -->
+      <ng-container matColumnDef="amount">
+        <th mat-header-cell *matHeaderCellDef>Monto</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.amount }}</td>
+      </ng-container>
+
+      <!-- Columna Currency -->
+      <ng-container matColumnDef="currency">
+        <th mat-header-cell *matHeaderCellDef>Moneda</th>
+        <td mat-cell *matCellDef="let tx">{{ tx.currency }}</td>
+      </ng-container>
+
+      <!-- Columna Date -->
+      <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef>Fecha</th>
+        <td mat-cell *matCellDef="let tx">{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
+      </ng-container>
+
+      <!-- Columna Status -->
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let tx" [ngClass]="{
+          'status-completed': tx.status === 'completed',
+          'status-pending': tx.status === 'pending',
+          'status-failed': tx.status === 'failed'
+        }">
+          {{ tx.status }}
+        </td>
+      </ng-container>
+
+      <!-- Filas -->
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+  </div>
+
+  <p *ngIf="solanaTransactions().length === 0" class="no-transactions">
+    <mat-icon>info</mat-icon>
+    No hay transacciones Solana.
+  </p>
 </div>

@@ -1,0 +1,125 @@
+.sidenav-container {
+  height: 100%;
+}
+
+.sidenav {
+  width: 200px;
+}
+
+.sidenav .mat-toolbar {
+  background: inherit;
+}
+
+.mat-toolbar.mat-primary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh; /* altura completa */
+}
+
+.router-container {
+  flex: 1;            /* ocupa el espacio disponible */
+  overflow-y: auto;   /* scroll si hay mucho contenido */
+}
+
+
+/*--------BOTONES SUPERIORES------------------------*/
+.links-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 5px;
+  gap: 10px; /* separación para pantallas grandes */
+}
+
+.link-item button {
+  padding: 6px 12px;
+  font-size: 14px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.switch {
+  margin-left: 5px;
+  flex-shrink: 0;
+}
+
+/* Menos de 960px → mostrar solo 3 botones, separación menor */
+@media (max-width: 960px) {
+  .link-item:nth-child(n+4) {
+    display: none;
+  }
+  .links-container {
+    gap: 6px;
+  }
+  .link-item button {
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+}
+
+/* Menos de 600px → mostrar solo 2 botones */
+@media (max-width: 600px) {
+  .link-item:nth-child(n+3) {
+    display: none;
+  }
+  .links-container {
+    gap: 4px;
+  }
+  .link-item button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Menos de 320px → mostrar solo 1 botón, ajustar tamaño */
+@media (max-width: 360px) {
+  .link-item:nth-child(n+2) {
+    display: none;
+  }
+  .link-item button {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+}
+
+/*----------botones sidenav-------------------------
+/* Ocultar todos los botones por defecto, luego mostrar solo los 7 primeros */
+.mat-nav-list .mat-list-item {
+  display: none !important;  /* oculta todos inicialmente */
+}
+
+.mat-nav-list .mat-list-item:nth-child(-n+7) {
+  display: flex !important;  /* muestra primeros 7 */
+}
+
+/* Menos de 960px → agregar 8 y 9 */
+@media (max-width: 960px) {
+  .mat-nav-list .mat-list-item:nth-child(8),
+  .mat-nav-list .mat-list-item:nth-child(9) {
+    display: flex !important;
+  }
+}
+
+/* Menos de 600px → agregar 10 */
+@media (max-width: 600px) {
+  .mat-nav-list .mat-list-item:nth-child(10) {
+    display: flex !important;
+  }
+}
+
+/* Menos de 320px → agregar 11 */
+@media (max-width: 320px) {
+  .mat-nav-list .mat-list-item:nth-child(11) {
+    display: flex !important;
+  }
+}
+

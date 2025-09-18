@@ -8,11 +8,38 @@ import { CHAINS, getChainById } from '../../helpers/chains.helper';
 import { Transaction } from '../../../types/types';
 import { Timestamp, getFirestore, doc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { Token } from '../../models/token.model';
+import { MatCardModule } from '@angular/material/card';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
+import { MatTableModule } from '@angular/material/table';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatListModule } from '@angular/material/list';
 
 @Component({
   selector: 'app-pago-wallets',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule,MatCardModule,
+    MatButtonModule,
+    MatSelectModule,
+    MatInputModule,
+    MatTableModule,
+    MatProgressSpinnerModule,
+    MatIconModule,
+    MatTabsModule,
+    MatToolbarModule,
+    MatMenuModule,
+    MatSnackBarModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatListModule],
   templateUrl: './pago-wallets.html',
   styleUrls: ['./pago-wallets.scss']
 })
@@ -47,6 +74,9 @@ export class PagoWallets implements OnInit, OnDestroy {
   availableTokens = signal<Token[]>([]);
   tokenBalances = signal<Map<string, string>>(new Map());
   chainName = signal<string>('Seleccione una red');
+
+  // ✅ COLUMNAS PARA LA TABLA DE MATERIAL
+  displayedColumns: string[] = ['txHash', 'from', 'to', 'amount', 'currency', 'date', 'status'];
 
   private walletListener: Unsubscribe | null = null;
   private adminWalletCache = new Map<string, { address: string | null, enabled: boolean }>();
