@@ -329,7 +329,7 @@ export class AuthWalletService implements OnDestroy {
   initProvider() {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       this.provider = new ethers.BrowserProvider((window as any).ethereum);
-      this.providerStatus.set('Proveedor detectado');
+      this.providerStatus.set('');
 
       const ethereum = (window as any).ethereum;
       // CORRECCIÓN: Guardar listeners para poder removerlos

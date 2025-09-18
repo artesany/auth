@@ -11,11 +11,11 @@
         Cerrar sesión
       </button>
       <div *ngIf="isAdmin">
-        <p>Funciones de administrador:</p>
+        <!-- <p>Funciones de administrador:</p>
         <button mat-stroked-button color="primary" (click)="resetAdminTo()">
           <mat-icon>build</mat-icon>
           Resetear Dirección Admin
-        </button>
+        </button> -->
       </div>
     </div>
     <div *ngIf="!isAuthenticated">
@@ -73,7 +73,7 @@
   </mat-card-content>
 </mat-card>
 
-<mat-card class="status-card">
+<!-- <mat-card class="status-card">
   <mat-card-content>
     <div class="status-content">
       <mat-icon class="status-icon">info</mat-icon>
@@ -81,7 +81,7 @@
     </div>
     <button mat-button (click)="debugService()">Debug</button>
   </mat-card-content>
-</mat-card>
+</mat-card> -->
 
 <mat-card *ngIf="!account && currentBlockchain() === 'ethereum'" class="no-wallet-card">
   <mat-card-content class="no-wallet-content">
