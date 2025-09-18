@@ -34,10 +34,10 @@
       </ng-container>
       <span class="spacer">Token's Factory</span>
       <div class="links-container">
-        <span class="link-item"><button matButton>Basic</button></span>
-        <span class="link-item"><button matButton>Basic</button></span>
-        <span class="link-item"><button matButton>Basic</button></span>
-        <span class="link-item"><button matButton>Basic</button></span>
+        <span class="link-item"><button routerLink="/" matButton>Home</button></span>
+        <span class="link-item"><button matButton>Config</button></span>
+        <span class="link-item"><button matButton>Info</button></span>
+        <span class="link-item"><button matButton>About</button></span>
         <span class="link-item"><button matButton>Basic</button></span>
        
     
@@ -47,10 +47,10 @@
       
   </mat-toolbar>
 
-
+<router-outlet></router-outlet>
 
  
-    <app-pago-wallets></app-pago-wallets>
+    <!-- <app-pago-wallets></app-pago-wallets> -->
     <!-- <app-footer></app-footer> -->
   </mat-sidenav-content>
  

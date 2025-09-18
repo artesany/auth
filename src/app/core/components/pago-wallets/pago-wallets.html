@@ -34,6 +34,16 @@
     </div>
   </mat-card-content>
 </mat-card>
+<mat-card *ngIf="!account && currentBlockchain() === 'ethereum'" class="no-wallet-card">
+  <mat-card-content class="no-wallet-content">
+    <mat-icon class="wallet-icon">account_balance_wallet</mat-icon>
+    <p class="no-wallets">No hay wallet Ethereum conectada.</p>
+    <button mat-raised-button color="primary" (click)="connectWallet()">
+      <mat-icon>link</mat-icon>
+      Conectar MetaMask
+    </button>
+  </mat-card-content>
+</mat-card>
 
 <mat-card class="blockchain-selector">
   <mat-card-header>
@@ -83,16 +93,7 @@
   </mat-card-content>
 </mat-card> -->
 
-<mat-card *ngIf="!account && currentBlockchain() === 'ethereum'" class="no-wallet-card">
-  <mat-card-content class="no-wallet-content">
-    <mat-icon class="wallet-icon">account_balance_wallet</mat-icon>
-    <p class="no-wallets">No hay wallet Ethereum conectada.</p>
-    <button mat-raised-button color="primary" (click)="connectWallet()">
-      <mat-icon>link</mat-icon>
-      Conectar MetaMask
-    </button>
-  </mat-card-content>
-</mat-card>
+
 
 <mat-card *ngIf="!solanaConnected && currentBlockchain() === 'solana'" class="no-wallet-card">
   <mat-card-content class="no-wallet-content">
@@ -211,7 +212,7 @@
       <p class="network-display">
         <span class="red-actual" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">RED ACTUAL:</span> 
         <span class="network-badge" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">
-          Solana Network (ID: {{ chainId || 'N/A' }} - {{ chainSymbol || 'SOL' }})
+          Solana Network 
         </span>
       </p>
       <div class="info-item">
@@ -243,7 +244,16 @@
           </mat-option>
         </mat-select>
       </mat-form-field>
+       <!-- Mensaje cuando no hay tokens -->
+  <div *ngIf="currentBlockchain() === 'solana' && solanaConnected && availableTokens().length === 0" 
+       class="wallet-locked-warning">
+    <mat-icon>lock</mat-icon>
+    <p>Desbloquea tu billetera Solana para ver la lista completa de tokens soportados</p>
+  </div>
+      
     </div>
+    
+    
 
     <!-- Envíos para Solana -->
     <div class="send-section">
@@ -267,7 +277,7 @@
               [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
               (click)="sendTransaction(to, amount)">
         <mat-icon>send</mat-icon>
-        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
+        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : 'Enviar' }}
       </button>
     </div>
   </mat-card-content>
@@ -412,4 +422,11 @@
     <mat-icon>info</mat-icon>
     No hay transacciones Solana.
   </p>
+</div>
+<div *ngIf="currentBlockchain() === 'solana'" style="background: #ffebee; padding: 10px; margin: 10px 0; border-radius: 4px;">
+  <h4>DEBUG Solana Tokens:</h4>
+  <p>Available Tokens Length: {{ availableTokens().length }}</p>
+  <p>Current Token: {{ currentToken() | json }}</p>
+  <p>Token Balances: {{ tokenBalances() | json }}</p>
+  <p>Solana Connected: {{ solanaConnected }}</p>
 </div>
