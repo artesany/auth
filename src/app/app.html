@@ -1,4 +1,7 @@
 
 <app-navbar></app-navbar>
+<div class="global-status" *ngIf="tokenPriceService.loadingState$ | async as loading">
+  {{ loading ? '🔄 Actualizando precios...' : '✅ Precios actualizados' }}
+</div>
 
 

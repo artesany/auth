@@ -1,6 +1,6 @@
 import { Component, inject, ViewChild, HostListener,ElementRef, OnInit} from '@angular/core';
 import{Switch} from '../switch/switch'
-import { NgIf,} from '@angular/common';
+import { NgIf,AsyncPipe} from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
@@ -9,6 +9,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { map, shareReplay } from 'rxjs';
 import { RouterOutlet, RouterModule} from '@angular/router'
+import { TokenPriceService } from '../../../services/token-price.service';
 // import{PagoWallets} from '../pago-wallets/pago-wallets'
 // import{ Footer }from '../pages/footer/footer'
 
@@ -28,11 +29,7 @@ import { RouterOutlet, RouterModule} from '@angular/router'
     NgIf,
     Switch,
     RouterOutlet,
-    
-    
-   
-  
-],
+    AsyncPipe],
   
 })
 export class Navbar implements OnInit {
@@ -40,6 +37,8 @@ export class Navbar implements OnInit {
   @ViewChild('sidenavContainer', { static: true }) sidenavContainer!: ElementRef;
 
   private breakpointObserver = inject(BreakpointObserver);
+
+  constructor(public tokenPriceService: TokenPriceService) {}
 
   // Flag que indica si estamos en móvil
   isMobile = false;

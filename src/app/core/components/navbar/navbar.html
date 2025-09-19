@@ -46,6 +46,11 @@
       <app-switch class="switch"></app-switch>
       
   </mat-toolbar>
+    <div class="price-status" *ngIf="tokenPriceService.loadingState$ | async as loading">
+    <small>
+      {{ loading ? '🔄 Actualizando precios...' : '✅ Precios actualizados' }}
+    </small>
+  </div>
 
 <router-outlet></router-outlet>
 
