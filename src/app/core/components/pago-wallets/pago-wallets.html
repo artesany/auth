@@ -93,8 +93,6 @@
   </mat-card-content>
 </mat-card> -->
 
-
-
 <mat-card *ngIf="!solanaConnected && currentBlockchain() === 'solana'" class="no-wallet-card">
   <mat-card-content class="no-wallet-content">
     <mat-icon class="wallet-icon">account_balance_wallet</mat-icon>
@@ -130,7 +128,6 @@
       <div class="info-item" *ngIf="currentToken()">
         <mat-icon>token</mat-icon>
         <span>Token: <strong>{{ currentToken()?.symbol }}</strong> - Saldo: <strong>{{ getCurrentTokenBalance() }}</strong>
-          <!-- ✅ NUEVO: Mostrar precio del token actual -->
           <span *ngIf="currentToken()?.price" class="token-price"> - ${{ currentToken()?.price | number:'1.2-2' }}</span>
         </span>
       </div>
@@ -154,7 +151,6 @@
       </mat-form-field>
     </div>
 
-    <!-- ✅ MODIFICADO: Token Selector con precios -->
     <div class="token-selector" *ngIf="availableTokens().length > 0">
       <h4>
         <mat-icon>token</mat-icon>
@@ -165,7 +161,6 @@
         <mat-select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)">
           <mat-option *ngFor="let token of availableTokens()" [value]="token">
             {{ token.symbol }} - {{ token.name }}
-            <!-- ✅ NUEVO: Precio en el mat-option -->
             <span class="token-price" *ngIf="token.price"> - ${{ token.price | number:'1.2-2' }}</span>
             <span class="token-price" *ngIf="!token.price"> - N/A</span>
             <span *ngIf="tokenBalances().get(token.address)">
@@ -174,16 +169,13 @@
           </mat-option>
         </mat-select>
       </mat-form-field>
-      <!-- ✅ NUEVO: Botón para actualizar precios -->
       <button mat-stroked-button (click)="refreshTokenPrices()" class="refresh-prices-btn">
         <mat-icon>refresh</mat-icon>
         Actualizar Precios
       </button>
     </div>
 
-    <!-- Envíos -->
     <div class="send-section">
-     
       <div *ngIf="!isHardcoded()" class="admin-warning">
         <mat-icon>warning</mat-icon>
         <p>No hay dirección administrativa configurada.</p>
@@ -193,11 +185,18 @@
         <input matInput [ngModel]="adminTo() ?? ''" [disabled]="isHardcoded()">
       </mat-form-field>
       
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Monto</mat-label>
-        <input matInput type="text" [(ngModel)]="amount" placeholder="0.0008"
-               (keypress)="validateNumericInput($event)">
-      </mat-form-field>
+      <div class="amount-section">
+        <mat-form-field appearance="outline" class="amount-input">
+          <mat-label>Monto ({{ currentToken()?.symbol || 'Token' }})</mat-label>
+          <input matInput type="text" [(ngModel)]="amount" placeholder="0.0008"
+                 (keypress)="validateNumericInput($event)" (ngModelChange)="calculateMyToken()">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="my-token-input">
+          <mat-label>Equivalente en MyToken</mat-label>
+          <input matInput type="text" [ngModel]="myTokenAmount | number:'1.0-2'" readonly
+                 (click)="simulateMyTokenEdit($event)">
+        </mat-form-field>
+      </div>
       
       <button mat-raised-button color="primary" class="send-button full-width"
               [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
@@ -209,7 +208,7 @@
   </mat-card-content>
 </mat-card>
 
-<!-- Token Selector para Solana (sin cambios, pero se mantiene para consistencia) -->
+<!-- Token Selector para Solana -->
 <mat-card *ngIf="solanaConnected && currentBlockchain() === 'solana'" class="wallet-card">
   <mat-card-header>
     <mat-card-title>Solana Wallet</mat-card-title>
@@ -230,7 +229,6 @@
       </div>
     </div>
 
-    <!-- Token Selector para Solana -->
     <div class="token-selector" *ngIf="availableTokens().length > 0">
       <h4>
         <mat-icon>token</mat-icon>
@@ -247,20 +245,14 @@
           </mat-option>
         </mat-select>
       </mat-form-field>
-       <!-- Mensaje cuando no hay tokens -->
-  <div *ngIf="currentBlockchain() === 'solana' && solanaConnected && availableTokens().length === 0" 
-       class="wallet-locked-warning">
-    <mat-icon>lock</mat-icon>
-    <p>Desbloquea tu billetera Solana para ver la lista completa de tokens soportados</p>
-  </div>
-      
+      <div *ngIf="currentBlockchain() === 'solana' && solanaConnected && availableTokens().length === 0" 
+           class="wallet-locked-warning">
+        <mat-icon>lock</mat-icon>
+        <p>Desbloquea tu billetera Solana para ver la lista completa de tokens soportados</p>
+      </div>
     </div>
     
-    
-
-    <!-- Envíos para Solana -->
     <div class="send-section">
-     
       <div *ngIf="!isHardcoded()" class="admin-warning">
         <mat-icon>warning</mat-icon>
         <p>No hay dirección administrativa configurada.</p>
@@ -292,7 +284,6 @@
   
   <div class="transactions-container">
     <table mat-table [dataSource]="ethTransactions()" class="transactions-table">
-      <!-- Columna Tx Hash -->
       <ng-container matColumnDef="txHash">
         <th mat-header-cell *matHeaderCellDef>Tx Hash</th>
         <td mat-cell *matCellDef="let tx">
@@ -303,37 +294,31 @@
         </td>
       </ng-container>
 
-      <!-- Columna From -->
       <ng-container matColumnDef="from">
         <th mat-header-cell *matHeaderCellDef>De</th>
         <td mat-cell *matCellDef="let tx">{{ tx.from | slice:0:10 }}...</td>
       </ng-container>
 
-      <!-- Columna To -->
       <ng-container matColumnDef="to">
         <th mat-header-cell *matHeaderCellDef>A</th>
         <td mat-cell *matCellDef="let tx">{{ tx.to | slice:0:10 }}...</td>
       </ng-container>
 
-      <!-- Columna Amount -->
       <ng-container matColumnDef="amount">
         <th mat-header-cell *matHeaderCellDef>Monto</th>
         <td mat-cell *matCellDef="let tx">{{ tx.amount }}</td>
       </ng-container>
 
-      <!-- Columna Currency -->
       <ng-container matColumnDef="currency">
         <th mat-header-cell *matHeaderCellDef>Moneda</th>
         <td mat-cell *matCellDef="let tx">{{ tx.currency }}</td>
       </ng-container>
 
-      <!-- Columna Date -->
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef>Fecha</th>
         <td mat-cell *matCellDef="let tx">{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
       </ng-container>
 
-      <!-- Columna Status -->
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef>Estado</th>
         <td mat-cell *matCellDef="let tx" [ngClass]="{
@@ -345,7 +330,6 @@
         </td>
       </ng-container>
 
-      <!-- Filas -->
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
       <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
     </table>
@@ -362,7 +346,6 @@
   
   <div class="transactions-container">
     <table mat-table [dataSource]="solanaTransactions()" class="transactions-table">
-      <!-- Columna Tx Hash -->
       <ng-container matColumnDef="txHash">
         <th mat-header-cell *matHeaderCellDef>Tx Hash</th>
         <td mat-cell *matCellDef="let tx">
@@ -373,37 +356,31 @@
         </td>
       </ng-container>
 
-      <!-- Columna From -->
       <ng-container matColumnDef="from">
         <th mat-header-cell *matHeaderCellDef>De</th>
         <td mat-cell *matCellDef="let tx">{{ tx.from | slice:0:10 }}...</td>
       </ng-container>
 
-      <!-- Columna To -->
       <ng-container matColumnDef="to">
         <th mat-header-cell *matHeaderCellDef>A</th>
         <td mat-cell *matCellDef="let tx">{{ tx.to | slice:0:10 }}...</td>
       </ng-container>
 
-      <!-- Columna Amount -->
       <ng-container matColumnDef="amount">
         <th mat-header-cell *matHeaderCellDef>Monto</th>
         <td mat-cell *matCellDef="let tx">{{ tx.amount }}</td>
       </ng-container>
 
-      <!-- Columna Currency -->
       <ng-container matColumnDef="currency">
         <th mat-header-cell *matHeaderCellDef>Moneda</th>
         <td mat-cell *matCellDef="let tx">{{ tx.currency }}</td>
       </ng-container>
 
-      <!-- Columna Date -->
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef>Fecha</th>
         <td mat-cell *matCellDef="let tx">{{ formatTimestamp(tx.timestamp) | date:'short' }}</td>
       </ng-container>
 
-      <!-- Columna Status -->
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef>Estado</th>
         <td mat-cell *matCellDef="let tx" [ngClass]="{
@@ -415,7 +392,6 @@
         </td>
       </ng-container>
 
-      <!-- Filas -->
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
       <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
     </table>
@@ -429,7 +405,4 @@
 <div *ngIf="currentBlockchain() === 'solana'" style="background: #ffebee; padding: 10px; margin: 10px 0; border-radius: 4px;">
   <h4>DEBUG Solana Tokens:</h4>
   <p>Available Tokens Length: {{ availableTokens().length }}</p>
-  <p>Current Token: {{ currentToken() | json }}</p>
-  <p>Token Balances: {{ tokenBalances() | json }}</p>
-  <p>Solana Connected: {{ solanaConnected }}</p>
 </div>

@@ -133,6 +133,19 @@ export class TokenPriceService {
         if (processedTokens.length >= 20) break;
       }
     }
+
+    // Añadir MyToken ficticio
+    processedTokens.push({
+      id: 'mytoken',
+      symbol: 'MYT',
+      name: 'MyToken',
+      blockchain: 'Ethereum',
+      current_price: 0.001,
+      price_change_24h: 0,
+      last_updated: new Date(),
+      image: undefined
+    });
+
     return processedTokens;
   }
 
