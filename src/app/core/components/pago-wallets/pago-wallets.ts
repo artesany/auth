@@ -8,6 +8,7 @@ import { CHAINS, getChainById } from '../../helpers/chains.helper';
 import { Transaction } from '../../../types/types';
 import { Timestamp, getFirestore, doc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { Token } from '../../models/token.model';
+import { TokenPriceService } from '../../../services/token-price.service'; // ✅ NUEVO: Importar TokenPriceService
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
@@ -84,7 +85,8 @@ export class PagoWallets implements OnInit, OnDestroy {
   constructor(
     public authWallet: AuthWalletService,
     public solanaWallet: SolanaWalletService,
-    private firestoreService: FirestoreService
+    private firestoreService: FirestoreService,
+    private tokenPriceService: TokenPriceService // ✅ NUEVO: Inyectar TokenPriceService
   ) {
     effect(() => {
       this.solanaAccount = this.solanaWallet.account();
@@ -371,6 +373,18 @@ export class PagoWallets implements OnInit, OnDestroy {
     const val = this.getCurrentTokenBalance();
     const n = parseFloat(val ?? '0');
     return isNaN(n) ? 0 : n;
+  }
+
+  // ✅ NUEVO: Refrescar precios de tokens
+  async refreshTokenPrices() {
+    try {
+      await this.tokenPriceService.refreshPrices().toPromise();
+      // El effect en AuthWalletService actualizará availableTokens automáticamente
+      console.log('Precios actualizados');
+    } catch (error) {
+      console.error('Error actualizando precios:', error);
+      alert('Error al actualizar precios: ' + (error as Error).message);
+    }
   }
 
   async sendTransaction(to: string, amount: string) {

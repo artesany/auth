@@ -23,6 +23,7 @@ import { Transaction } from '../../types/types';
 import { TokenService } from '../tokens/services/token-service';
 import { TokenRegistryService } from '../tokens/services/token-registry';
 import { Token } from '../models/token.model';
+import { TokenPriceService } from '../../services/token-price.service'; // ✅ NUEVO: Importar TokenPriceService
 
 @Injectable({ providedIn: 'root' })
 export class AuthWalletService implements OnDestroy {
@@ -44,7 +45,7 @@ export class AuthWalletService implements OnDestroy {
 
   // ✅ NUEVAS SIGNALS PARA TOKENS
   currentToken = signal<Token | null>(null);
-  availableTokens = signal<Token[]>([]);
+  availableTokens = signal<Token[]>([]); // ✅ Modificado: Ahora soporta Token con price opcional
   tokenBalances = signal<Map<string, string>>(new Map());
 
   // Nuevas signals para autenticación social
@@ -67,11 +68,16 @@ export class AuthWalletService implements OnDestroy {
   // private tokenService = inject(TokenService);
   // private tokenRegistry = inject(TokenRegistryService);
 
+  // ✅ NUEVO: Suscripción a precios
+  private pricesSubscription: any = null;
+  private priceCache: Map<string, number> = new Map(); // Cache local de precios por symbol
+
   constructor(
     private http: HttpClient,
     private firestoreService: FirestoreService,
       private tokenService: TokenService,        // ✅ Inyectar normalmente
-    private tokenRegistry: TokenRegistryService // ✅ Inyectar normalmente
+    private tokenRegistry: TokenRegistryService, // ✅ Inyectar normalmente
+    private tokenPriceService: TokenPriceService // ✅ NUEVO: Inyectar TokenPriceService
   ) {
     // Effects existentes
     effect(() => {
@@ -112,9 +118,12 @@ export class AuthWalletService implements OnDestroy {
       this.authStateUnsubscribe();
     }
     this.removeEthereumListeners(); // CORRECCIÓN: Limpiar listeners
+    if (this.pricesSubscription) { // ✅ NUEVO: Desuscribir de precios
+      this.pricesSubscription.unsubscribe();
+    }
   }
 
-  // ✅ NUEVO MÉTODO: Cargar tokens disponibles
+  // ✅ MODIFICADO: Cargar tokens disponibles y enriquecer con precios
   private loadAvailableTokens() {
     if (!this.chainId()) return;
     
@@ -126,6 +135,27 @@ export class AuthWalletService implements OnDestroy {
     if (nativeToken) {
       this.currentToken.set(nativeToken);
     }
+
+    // ✅ NUEVO: Suscribirse a precios y enriquecer tokens
+    if (this.pricesSubscription) {
+      this.pricesSubscription.unsubscribe();
+    }
+    this.pricesSubscription = this.tokenPriceService.currentPrices$.subscribe(prices => {
+      const priceMap = new Map(prices.map(p => [p.symbol.toUpperCase(), p.current_price]));
+      this.priceCache = priceMap;
+
+      // Enriquecer tokens existentes con precio
+      const enrichedTokens = tokens.map(token => ({
+        ...token,
+        price: priceMap.get(token.symbol.toUpperCase()) || null
+      }));
+      this.availableTokens.set(enrichedTokens);
+    });
+  }
+
+  // ✅ NUEVO: Obtener precio por símbolo
+  getTokenPrice(symbol: string): number | null {
+    return this.priceCache.get(symbol.toUpperCase()) || this.tokenPriceService.getTokenPrice(symbol);
   }
 
   // ✅ NUEVO MÉTODO: Actualizar balances de tokens
@@ -256,27 +286,28 @@ export class AuthWalletService implements OnDestroy {
     });
   }
 
+  // ✅ CORREGIDO: Método initializeAppAuth con scoping correcto
   private async initializeAppAuth() {
-    const savedToken = localStorage.getItem(this.AUTH_TOKEN_KEY);
-    const savedUuid = localStorage.getItem(this.ANON_UUID_KEY);
-
-    if (savedToken) {
-      try {
+    try {
+      const savedToken = localStorage.getItem(this.AUTH_TOKEN_KEY);
+      const savedUuid = localStorage.getItem(this.ANON_UUID_KEY);
+      
+      if (savedToken) {
+        console.log('Intentando recuperar sesión con token guardado...');
         await signInWithCustomToken(this.auth, savedToken);
-        this.token.set(savedToken);
-        console.log('Sesión recuperada desde localStorage');
-      } catch (error) {
-        console.error('Error recuperando sesión:', error);
-        this.cleanupAuth();
-        
-        if (savedUuid) {
-          console.log('Intentando reautenticación anónima...');
-          await this.loginAnonymous(savedUuid);
-        }
+      } else if (savedUuid) {
+        console.log('Intentando reautenticación anónima...');
+        await this.loginAnonymous(savedUuid);
       }
-    } else if (savedUuid) {
-      console.log('Intentando autenticación anónima con UUID guardado...');
-      await this.loginAnonymous(savedUuid);
+    } catch (error) {
+      console.error('Error recuperando sesión:', error);
+      this.cleanupAuth();
+      
+      const savedUuid = localStorage.getItem(this.ANON_UUID_KEY);
+      if (savedUuid) {
+        console.log('Intentando reautenticación anónima...');
+        await this.loginAnonymous(savedUuid);
+      }
     }
   }
 

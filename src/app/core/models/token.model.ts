@@ -6,6 +6,7 @@ export interface Token {
   chainId: number|string;
   logoURI?: string;
   isNative?: boolean;
+  price?: number | null;
 }
 
 export interface TokenBalance {

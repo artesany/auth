@@ -129,7 +129,10 @@
       </div>
       <div class="info-item" *ngIf="currentToken()">
         <mat-icon>token</mat-icon>
-        <span>Token: <strong>{{ currentToken()?.symbol }}</strong> - Saldo: <strong>{{ getCurrentTokenBalance() }}</strong></span>
+        <span>Token: <strong>{{ currentToken()?.symbol }}</strong> - Saldo: <strong>{{ getCurrentTokenBalance() }}</strong>
+          <!-- ✅ NUEVO: Mostrar precio del token actual -->
+          <span *ngIf="currentToken()?.price" class="token-price"> - ${{ currentToken()?.price | number:'1.2-2' }}</span>
+        </span>
       </div>
     </div>
 
@@ -151,7 +154,7 @@
       </mat-form-field>
     </div>
 
-    <!-- Token Selector -->
+    <!-- ✅ MODIFICADO: Token Selector con precios -->
     <div class="token-selector" *ngIf="availableTokens().length > 0">
       <h4>
         <mat-icon>token</mat-icon>
@@ -162,12 +165,20 @@
         <mat-select [ngModel]="currentToken()" (ngModelChange)="onTokenChange($event)">
           <mat-option *ngFor="let token of availableTokens()" [value]="token">
             {{ token.symbol }} - {{ token.name }}
+            <!-- ✅ NUEVO: Precio en el mat-option -->
+            <span class="token-price" *ngIf="token.price"> - ${{ token.price | number:'1.2-2' }}</span>
+            <span class="token-price" *ngIf="!token.price"> - N/A</span>
             <span *ngIf="tokenBalances().get(token.address)">
               ({{ tokenBalances().get(token.address) }})
             </span>
           </mat-option>
         </mat-select>
       </mat-form-field>
+      <!-- ✅ NUEVO: Botón para actualizar precios -->
+      <button mat-stroked-button (click)="refreshTokenPrices()" class="refresh-prices-btn">
+        <mat-icon>refresh</mat-icon>
+        Actualizar Precios
+      </button>
     </div>
 
     <!-- Envíos -->
@@ -192,13 +203,13 @@
               [disabled]="!isAuthenticated || !isHardcoded() || getCurrentTokenBalanceNumber() <= 0"
               (click)="sendTransaction(to, amount)">
         <mat-icon>send</mat-icon>
-        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : '🚀 Enviar' }}
+        {{ !isAuthenticated ? '🔒 Autentícate primero' : !isHardcoded() ? '🔧 Configura dirección admin' : 'Enviar' }}
       </button>
     </div>
   </mat-card-content>
 </mat-card>
 
-<!-- 🔹 SECCIÓN 2: Información de wallet + Token + Envíos para Solana (NUEVA) -->
+<!-- Token Selector para Solana (sin cambios, pero se mantiene para consistencia) -->
 <mat-card *ngIf="solanaConnected && currentBlockchain() === 'solana'" class="wallet-card">
   <mat-card-header>
     <mat-card-title>Solana Wallet</mat-card-title>
@@ -209,12 +220,6 @@
         <mat-icon>account_circle</mat-icon>
         <span>Cuenta: <strong>{{ solanaAccount }}</strong></span>
       </div>
-      <p class="network-display">
-        <span class="red-actual" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">RED ACTUAL:</span> 
-        <span class="network-badge" [ngClass]="'network-solana-' + (currentBlockchain() === 'solana' ? 'mainnet' : 'devnet')">
-          Solana Network 
-        </span>
-      </p>
       <div class="info-item">
         <mat-icon>account_balance</mat-icon>
         <span>Saldo: <strong>{{ solanaBalance }} SOL</strong></span>
@@ -225,9 +230,7 @@
       </div>
     </div>
 
-    <mat-divider></mat-divider>
-
-    <!-- Selector de Token para Solana (sin selector de red, ya que Solana no lo necesita de la misma manera) -->
+    <!-- Token Selector para Solana -->
     <div class="token-selector" *ngIf="availableTokens().length > 0">
       <h4>
         <mat-icon>token</mat-icon>
